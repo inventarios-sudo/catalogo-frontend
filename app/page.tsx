@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+// Configuración de Supabase
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
@@ -43,6 +44,7 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
+  // Estado para la ventana emergente (modal)
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,7 +90,7 @@ export default function CatalogoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 font-sans print:bg-white print:p-0">
+    <div className="min-h-screen bg-gray-100 p-2 sm:p-4 font-sans print:bg-white print:p-0">
       <style jsx global>{`
         @media print {
           .no-print { display: none !important; }
@@ -102,30 +104,33 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* Header y Filtros */}
-      <div className="no-print max-w-7xl mx-auto bg-white p-4 rounded-xl shadow-md mb-6 flex flex-wrap items-center justify-between gap-4">
+      {/* HEADER Y FILTROS RESPONSIVOS (OPTIMIZADOS PARA MÓVIL) */}
+      <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
+        
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 flex items-center gap-2">
             📦 Catálogo de Productos
           </h1>
-          <p className="text-sm text-gray-500">
-            Mostrando: <span className="font-semibold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+            Mostrando: <span className="font-bold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Controles de búsqueda y filtros adaptables */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
+          
           <input
             type="text"
-            placeholder="Buscar por código o descripción..."
+            placeholder="Buscar código o nombre..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
           <select
             value={selectedLinea}
             onChange={(e) => setSelectedLinea(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="TODAS">Todas las Líneas ({lineas.length})</option>
             {lineas.map((linea) => (
@@ -138,7 +143,7 @@ export default function CatalogoPage() {
           <select
             value={priceList}
             onChange={(e) => setPriceList(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-blue-50 text-blue-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-blue-50 text-blue-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="pvp1">Lista PVP 1</option>
             <option value="pvp3">Lista PVP 3</option>
@@ -147,7 +152,7 @@ export default function CatalogoPage() {
             <option value="pvp6">Lista PVP 6</option>
           </select>
 
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 bg-gray-50 px-3 py-2 rounded-lg border cursor-pointer select-none">
+          <label className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showPrices}
@@ -159,20 +164,20 @@ export default function CatalogoPage() {
 
           <button
             onClick={() => window.print()}
-            className="bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow transition-colors flex items-center gap-2"
+            className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
           >
-            📄 PDF ({selectedLinea === 'TODAS' ? 'Todo' : 'Línea'})
+            📄 Generar PDF
           </button>
         </div>
       </div>
 
       {errorMsg && (
-        <div className="no-print max-w-7xl mx-auto mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 font-medium">
+        <div className="no-print max-w-7xl mx-auto mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs sm:text-sm font-medium">
           ⚠️ Diagnóstico: {errorMsg}
         </div>
       )}
 
-      {/* Encabezado exclusivo para PDF */}
+      {/* ENCABEZADO PARA IMPRESIÓN/PDF */}
       <div className="hidden print:block mb-4 text-center border-b pb-2">
         <h1 className="text-xl font-bold">Catálogo de Productos</h1>
         <p className="text-xs text-gray-600">
@@ -180,18 +185,19 @@ export default function CatalogoPage() {
         </p>
       </div>
 
-      {/* Lista de Productos */}
+      {/* REJILLA DE PRODUCTOS (GRID RESPONSIVO) */}
       {loading ? (
-        <div className="text-center py-20 no-print">
+        <div className="text-center py-16 no-print">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent"></div>
-          <p className="mt-2 text-gray-600 font-medium">Cargando catálogo...</p>
+          <p className="mt-2 text-gray-600 text-sm font-medium">Cargando catálogo...</p>
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="text-center py-20 text-gray-500 font-medium no-print">
-          No se encontraron productos para esta línea o búsqueda.
+        <div className="text-center py-16 text-gray-500 text-sm font-medium no-print">
+          No se encontraron productos para esta búsqueda.
         </div>
       ) : (
-        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 grid-container">
+        /* En móviles pequeños muestra 2 tarjetas por fila (grid-cols-2), en pantallas medianas 3 y en PC 4 */
+        <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 grid-container">
           {filteredProducts.map((p) => {
             const cleanUrl = getCleanImageUrl(p.imagen_url);
             const price = getSelectedPrice(p);
@@ -199,62 +205,58 @@ export default function CatalogoPage() {
             return (
               <div
                 key={p.id}
-                className="page-break bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
+                className="page-break bg-white border border-gray-200 rounded-xl p-2.5 sm:p-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <div>
-                  {/* Contenedor interactivo de la Imagen */}
+                  {/* Foto con soporte táctil */}
                   <div 
-                    onClick={() => {
-                      if (cleanUrl) {
-                        setPreviewImage(cleanUrl);
-                      }
-                    }}
-                    className={`w-full h-40 bg-gray-50 rounded-lg overflow-hidden mb-3 flex items-center justify-center relative ${
-                      cleanUrl ? 'cursor-zoom-in hover:opacity-90' : ''
+                    onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
+                    className={`w-full h-32 sm:h-40 bg-gray-50 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative touch-manipulation ${
+                      cleanUrl ? 'cursor-pointer active:scale-95 transition-transform' : ''
                     }`}
                   >
                     {cleanUrl ? (
                       <img
                         src={cleanUrl}
                         alt={p.descripcion}
-                        className="w-full h-full object-contain pointer-events-auto"
+                        className="w-full h-full object-contain"
                         loading="lazy"
                       />
                     ) : (
-                      <span className="text-xs text-gray-400">Sin Imagen</span>
+                      <span className="text-[10px] sm:text-xs text-gray-400">Sin Imagen</span>
                     )}
                   </div>
 
-                  <div className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide truncate mb-1">
+                  <div className="text-[9px] sm:text-[10px] font-bold text-blue-600 uppercase tracking-wide truncate mb-0.5">
                     {p.linea}
                   </div>
 
-                  <h3 className="text-xs font-bold text-gray-800 line-clamp-2 mb-1 uppercase">
+                  <h3 className="text-[11px] sm:text-xs font-bold text-gray-800 line-clamp-2 leading-tight uppercase mb-1">
                     {p.descripcion}
                   </h3>
 
-                  <div className="text-[11px] text-gray-500 mb-2">
+                  <div className="text-[10px] sm:text-[11px] text-gray-500 mb-2">
                     Ref: <span className="font-mono text-gray-700">{p.referencia}</span>
                   </div>
                 </div>
 
-                <div className="border-t border-gray-100 pt-2 flex items-center justify-between mt-auto">
+                <div className="border-t border-gray-100 pt-1.5 sm:pt-2 flex items-center justify-between mt-auto">
                   {showPrices ? (
                     <div>
-                      <div className="text-[9px] text-gray-400 uppercase font-bold">
+                      <div className="text-[8px] sm:text-[9px] text-gray-400 uppercase font-bold">
                         Precio ({priceList.toUpperCase()})
                       </div>
-                      <div className="text-sm font-black text-green-600">
+                      <div className="text-xs sm:text-sm font-extrabold text-green-600">
                         ${typeof price === 'number' ? price.toFixed(2) : price}
                       </div>
                     </div>
                   ) : (
-                    <div className="text-[10px] text-gray-400 italic">Precio no disponible</div>
+                    <div className="text-[9px] sm:text-[10px] text-gray-400 italic">Sin Precio</div>
                   )}
 
                   <div className="text-right">
-                    <div className="text-[9px] text-gray-400 uppercase font-bold">Stock</div>
-                    <div className={`text-xs font-bold ${p.existencia > 0 ? 'text-gray-700' : 'text-red-500'}`}>
+                    <div className="text-[8px] sm:text-[9px] text-gray-400 uppercase font-bold">Stock</div>
+                    <div className={`text-[11px] sm:text-xs font-bold ${p.existencia > 0 ? 'text-gray-700' : 'text-red-500'}`}>
                       {p.existencia} und
                     </div>
                   </div>
@@ -265,29 +267,30 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* VENTANA EMERGENTE (MODAL CON ALTO Z-INDEX Y PARÁMETROS FIX) */}
+      {/* VENTANA EMERGENTE PARA MÓVILES Y COMPUTADORAS */}
       {previewImage && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.85)' }}
-          className="no-print flex items-center justify-center p-4 cursor-pointer backdrop-blur-sm"
+          style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.9)' }}
+          className="no-print flex items-center justify-center p-2 sm:p-4 touch-none backdrop-blur-sm"
           onClick={() => setPreviewImage(null)}
         >
           <div 
-            style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}
+            style={{ position: 'relative', maxWidth: '95vw', maxHeight: '90vh' }}
             className="bg-white rounded-2xl p-2 shadow-2xl flex items-center justify-center overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Botón de cierre agrandado para tocar fácilmente con el dedo */}
             <button
               onClick={() => setPreviewImage(null)}
-              style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 100000 }}
-              className="bg-black/70 hover:bg-black text-white rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold shadow transition-colors"
+              style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 100000 }}
+              className="bg-black/80 hover:bg-black text-white rounded-full w-10 h-10 flex items-center justify-center text-xl font-bold shadow-lg transition-colors active:scale-90"
             >
               ✕
             </button>
             <img
               src={previewImage}
               alt="Vista ampliada"
-              style={{ maxWidth: '85vw', maxHeight: '80vh', objectFit: 'contain' }}
+              style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain' }}
               className="rounded-xl"
             />
           </div>
