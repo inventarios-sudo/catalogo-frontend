@@ -44,7 +44,7 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
-  // Estado para la imagen ampliada
+  // Estado para controlar la imagen que se abre en pantalla grande
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export default function CatalogoPage() {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .range(0, 1999);
+        .range(0, 1999); // Carga hasta 2000 productos
 
       if (error) {
         console.error('DETALLE ERROR SUPABASE:', error);
@@ -91,7 +91,7 @@ export default function CatalogoPage() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 font-sans print:bg-white print:p-0">
-      {/* Estilos para impresión en PDF */}
+      {/* Estilos para exportar a PDF */}
       <style jsx global>{`
         @media print {
           .no-print { display: none !important; }
@@ -105,7 +105,7 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* Header y Filtros */}
+      {/* Header y Filtros (Ocultos al imprimir) */}
       <div className="no-print max-w-7xl mx-auto bg-white p-4 rounded-xl shadow-md mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -175,7 +175,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* ENCABEZADO EXCLUSIVO PARA IMPRESIÓN/PDF */}
+      {/* Encabezado exclusivo para PDF */}
       <div className="hidden print:block mb-4 text-center border-b pb-2">
         <h1 className="text-xl font-bold">Catálogo de Productos</h1>
         <p className="text-xs text-gray-600">
@@ -183,7 +183,7 @@ export default function CatalogoPage() {
         </p>
       </div>
 
-      {/* GALERÍA DE PRODUCTOS */}
+      {/* Tarjetas de Productos */}
       {loading ? (
         <div className="text-center py-20 no-print">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent"></div>
@@ -259,7 +259,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* MODAL DE VISTA PREVIA DE IMAGEN AMPLIADA */}
+      {/* VENTANA EMERGENTE / MODAL PARA AMPLIAR IMAGEN */}
       {previewImage && (
         <div
           className="no-print fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
@@ -268,13 +268,13 @@ export default function CatalogoPage() {
           <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl overflow-hidden shadow-2xl p-2">
             <button
               onClick={() => setPreviewImage(null)}
-              className="absolute top-3 right-3 bg-gray-900/70 hover:bg-gray-900 text-white rounded-full p-2 w-8 h-8 flex items-center justify-center text-sm font-bold shadow transition-colors"
+              className="absolute top-3 right-3 bg-gray-900/70 hover:bg-gray-900 text-white rounded-full p-2 w-8 h-8 flex items-center justify-center text-sm font-bold shadow transition-colors z-10"
             >
               ✕
             </button>
             <img
               src={previewImage}
-              alt="Vista ampliada"
+              alt="Imagen ampliada"
               className="max-w-full max-h-[85vh] object-contain rounded-xl"
             />
           </div>
