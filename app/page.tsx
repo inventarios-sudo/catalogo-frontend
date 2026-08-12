@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Configuración de Supabase
-const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlra2ZhZmx3em95eW5odG10cXdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTEzMDIsImV4cCI6MjEwMDc2NzMwMn0.0AWI85fviSMWrGfXNLu9nwvhPEEf5BMNWiXwoIopI_Q';
+// Configuración de Supabase con fallback a variables de entorno
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlra2ZhZmx3em95bmhtdG10aXdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjIwOTExMDIsImV4cCI6MjAzNzY2NzEwMn0.0AWI85fviSMWrGfXNLu9nwvhPEEf5BMNWiXwoIopI_Q';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -23,7 +23,7 @@ interface Product {
   imagen_url: string;
 }
 
-// Función para transformar links de Google Drive a formato directo compatible con <img>
+// Función para transformar links de Google Drive a formato directo
 function getCleanImageUrl(url: string | null | undefined): string {
   if (!url || typeof url !== 'string' || !url.trim()) return '';
 
@@ -42,6 +42,7 @@ export default function CatalogoPage() {
   const [lineas, setLineas] = useState<string[]>([]);
   const [selectedLinea, setSelectedLinea] = useState<string>('TODAS');
   const [priceList, setPriceList] = useState<string>('pvp1');
+  const [showPrices, setShowPrices] = useState<boolean>(true); // Opción de mostrar/ocultar precios
   const [search, setSearch] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -57,8 +58,8 @@ export default function CatalogoPage() {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('*');
-       
+        .select('*')
+        .range(0, 2000); // Permite traer hasta 2000 productos
 
       if (error) {
         console.error('DETALLE ERROR SUPABASE:', error);
@@ -95,17 +96,74 @@ export default function CatalogoPage() {
     return priceMap[priceList] || product.pvp1;
   };
 
+  // Función para disparar la descarga/impresión en PDF
+  const handleDownloadPDF = () => {
+    window.print();
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6 text-gray-800">
-      <header className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      
+      {/* CSS Específico para formatear la exportación a PDF al presionar Imprimir */}
+      <style jsx global>{`
+        @media print {
+          /* Ocultar barra superior, filtros y mensajes de diagnóstico en el PDF */
+          .no-print, header, .error-banner, button, input, select, label {
+            display: none !important;
+          }
+
+          body {
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
+          .pdf-header {
+            display: block !important;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+          }
+
+          /* Organizar productos en una cuadrícula fija de 3 columnas en PDF */
+          .product-grid {
+            display: grid !important;
+            grid-template-columns: repeat(3, 1fr) !important;
+            gap: 15px !important;
+          }
+
+          /* Evitar que una tarjeta de producto se parta a la mitad entre páginas */
+          .product-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            border: 1px solid #ddd !important;
+            box-shadow: none !important;
+          }
+        }
+
+        .pdf-header {
+          display: none;
+        }
+      `}</style>
+
+      {/* Header visible para el PDF */}
+      <div className="pdf-header text-center">
+        <h1 className="text-2xl font-bold">Catálogo de Productos</h1>
+        <p className="text-sm">
+          Línea: <strong>{selectedLinea}</strong> | Total: {filteredProducts.length} productos
+          {showPrices && ` | (${priceList.toUpperCase()})`}
+        </p>
+      </div>
+
+      <header className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100 no-print">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">📦 Catálogo de Productos</h1>
           <p className="text-sm text-gray-500">
-            Total cargados: <strong className="text-blue-600">{products.length} productos</strong>
+            Mostrando: <strong className="text-blue-600">{filteredProducts.length} de {products.length} productos</strong>
           </p>
         </div>
 
-        {/* Controles de Filtro y Búsqueda */}
+        {/* Controles de Filtro, Búsqueda y Opciones de PDF */}
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"
@@ -115,10 +173,11 @@ export default function CatalogoPage() {
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
+          {/* Selector de Líneas */}
           <select
             value={selectedLinea}
             onChange={(e) => setSelectedLinea(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium text-gray-800"
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium text-gray-800 focus:ring-2 focus:ring-blue-500"
           >
             <option value="TODAS">Todas las Líneas ({lineas.length})</option>
             {lineas.map((linea) => (
@@ -126,22 +185,45 @@ export default function CatalogoPage() {
             ))}
           </select>
 
-          <select
-            value={priceList}
-            onChange={(e) => setPriceList(e.target.value)}
-            className="px-4 py-2 border rounded-lg text-sm bg-blue-50 border-blue-200 font-bold text-blue-700"
+          {/* Selector de Lista de Precio */}
+          {showPrices && (
+            <select
+              value={priceList}
+              onChange={(e) => setPriceList(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm bg-blue-50 border-blue-200 font-bold text-blue-700"
+            >
+              <option value="pvp1">Lista PVP 1</option>
+              <option value="pvp3">Lista PVP 3</option>
+              <option value="pvp4">Lista PVP 4</option>
+              <option value="pvp5">Lista PVP 5</option>
+              <option value="pvp6">Lista PVP 6</option>
+            </select>
+          )}
+
+          {/* Checkbox Ocultar / Mostrar Precios */}
+          <label className="flex items-center gap-2 cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg text-xs font-semibold text-gray-700 transition select-none">
+            <input
+              type="checkbox"
+              checked={showPrices}
+              onChange={(e) => setShowPrices(e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            Ver Precios
+          </label>
+
+          {/* Botón Descargar PDF */}
+          <button
+            onClick={handleDownloadPDF}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-sm transition shadow-sm active:scale-95"
+            title="Descargar o imprimir catálogo en PDF"
           >
-            <option value="pvp1">Lista PVP 1</option>
-            <option value="pvp3">Lista PVP 3</option>
-            <option value="pvp4">Lista PVP 4</option>
-            <option value="pvp5">Lista PVP 5</option>
-            <option value="pvp6">Lista PVP 6</option>
-          </select>
+            📄 PDF ({selectedLinea === 'TODAS' ? 'Todo' : 'Línea'})
+          </button>
         </div>
       </header>
 
       {errorMsg && (
-        <div className="max-w-7xl mx-auto mb-6 p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
+        <div className="error-banner max-w-7xl mx-auto mb-6 p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
           ⚠️ <strong>Diagnóstico:</strong> {errorMsg}
         </div>
       )}
@@ -151,13 +233,13 @@ export default function CatalogoPage() {
         {loading ? (
           <div className="text-center py-20 text-gray-500 font-medium">Cargando catálogo...</div>
         ) : filteredProducts.length === 0 ? (
-          <div className="text-center py-20 text-gray-500 font-medium">No se encontraron productos.</div>
+          <div className="text-center py-20 text-gray-500 font-medium">No se encontraron productos para esta línea o búsqueda.</div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="product-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredProducts.map((p) => {
               const cleanUrl = getCleanImageUrl(p.imagen_url);
               return (
-                <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition">
+                <div key={p.id} className="product-card bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition">
                   <div className="h-48 bg-gray-100 relative flex items-center justify-center overflow-hidden">
                     {cleanUrl ? (
                       <img 
@@ -185,12 +267,19 @@ export default function CatalogoPage() {
                     <p className="text-xs text-gray-400 font-mono mt-1">Ref: {p.referencia}</p>
 
                     <div className="mt-4 flex items-center justify-between border-t pt-3">
-                      <div>
-                        <span className="text-xs text-gray-400 block">Precio ({priceList.toUpperCase()})</span>
-                        <span className="text-lg font-extrabold text-green-600">
-                          ${Number(getPrice(p) || 0).toFixed(2)}
-                        </span>
-                      </div>
+                      {showPrices ? (
+                        <div>
+                          <span className="text-xs text-gray-400 block">Precio ({priceList.toUpperCase()})</span>
+                          <span className="text-lg font-extrabold text-green-600">
+                            ${Number(getPrice(p) || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-xs text-gray-400 italic">Precio no disponible</span>
+                        </div>
+                      )}
+                      
                       <div className="text-right">
                         <span className="text-xs text-gray-400 block">Stock</span>
                         <span className={`text-xs font-bold ${p.existencia > 0 ? 'text-gray-700' : 'text-red-500'}`}>
