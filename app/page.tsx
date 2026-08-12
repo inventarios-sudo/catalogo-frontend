@@ -59,7 +59,7 @@ export default function CatalogoPage() {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .range(0, 2000); // Permite traer hasta 2000 productos
+        .range(0, 1999); // Permite traer hasta 2000 productos
 
       if (error) {
         console.error('DETALLE ERROR SUPABASE:', error);
