@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Configuración de Supabase
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
@@ -44,7 +43,6 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
-  // Estado para controlar la imagen que se abre en pantalla grande
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,7 +57,7 @@ export default function CatalogoPage() {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .range(0, 1999); // Carga hasta 2000 productos
+        .range(0, 1999);
 
       if (error) {
         console.error('DETALLE ERROR SUPABASE:', error);
@@ -91,7 +89,6 @@ export default function CatalogoPage() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 font-sans print:bg-white print:p-0">
-      {/* Estilos para exportar a PDF */}
       <style jsx global>{`
         @media print {
           .no-print { display: none !important; }
@@ -105,7 +102,7 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* Header y Filtros (Ocultos al imprimir) */}
+      {/* Header y Filtros */}
       <div className="no-print max-w-7xl mx-auto bg-white p-4 rounded-xl shadow-md mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -183,7 +180,7 @@ export default function CatalogoPage() {
         </p>
       </div>
 
-      {/* Tarjetas de Productos */}
+      {/* Lista de Productos */}
       {loading ? (
         <div className="text-center py-20 no-print">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent"></div>
@@ -205,13 +202,22 @@ export default function CatalogoPage() {
                 className="page-break bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
               >
                 <div>
-                  <div className="w-full h-40 bg-gray-50 rounded-lg overflow-hidden mb-3 flex items-center justify-center relative group">
+                  {/* Contenedor interactivo de la Imagen */}
+                  <div 
+                    onClick={() => {
+                      if (cleanUrl) {
+                        setPreviewImage(cleanUrl);
+                      }
+                    }}
+                    className={`w-full h-40 bg-gray-50 rounded-lg overflow-hidden mb-3 flex items-center justify-center relative ${
+                      cleanUrl ? 'cursor-zoom-in hover:opacity-90' : ''
+                    }`}
+                  >
                     {cleanUrl ? (
                       <img
                         src={cleanUrl}
                         alt={p.descripcion}
-                        className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
-                        onClick={() => setPreviewImage(cleanUrl)}
+                        className="w-full h-full object-contain pointer-events-auto"
                         loading="lazy"
                       />
                     ) : (
@@ -259,23 +265,30 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* VENTANA EMERGENTE / MODAL PARA AMPLIAR IMAGEN */}
+      {/* VENTANA EMERGENTE (MODAL CON ALTO Z-INDEX Y PARÁMETROS FIX) */}
       {previewImage && (
         <div
-          className="no-print fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+          style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.85)' }}
+          className="no-print flex items-center justify-center p-4 cursor-pointer backdrop-blur-sm"
           onClick={() => setPreviewImage(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl overflow-hidden shadow-2xl p-2">
+          <div 
+            style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}
+            className="bg-white rounded-2xl p-2 shadow-2xl flex items-center justify-center overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setPreviewImage(null)}
-              className="absolute top-3 right-3 bg-gray-900/70 hover:bg-gray-900 text-white rounded-full p-2 w-8 h-8 flex items-center justify-center text-sm font-bold shadow transition-colors z-10"
+              style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 100000 }}
+              className="bg-black/70 hover:bg-black text-white rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold shadow transition-colors"
             >
               ✕
             </button>
             <img
               src={previewImage}
-              alt="Imagen ampliada"
-              className="max-w-full max-h-[85vh] object-contain rounded-xl"
+              alt="Vista ampliada"
+              style={{ maxWidth: '85vw', maxHeight: '80vh', objectFit: 'contain' }}
+              className="rounded-xl"
             />
           </div>
         </div>
