@@ -44,11 +44,20 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
-  // Estado para la ventana emergente (modal)
+  // Estado para la vista de imagen completa
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProducts();
+  }, []);
+
+  // Cerrar modal con la tecla ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewImage(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   async function fetchProducts() {
@@ -59,7 +68,7 @@ export default function CatalogoPage() {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .range(0, 1999);
+        .range(0, 2999);
 
       if (error) {
         console.error('DETALLE ERROR SUPABASE:', error);
@@ -104,7 +113,7 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* HEADER Y FILTROS RESPONSIVOS (OPTIMIZADOS PARA MÓVIL) */}
+      {/* HEADER Y FILTROS */}
       <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
         
         <div>
@@ -116,7 +125,7 @@ export default function CatalogoPage() {
           </p>
         </div>
 
-        {/* Controles de búsqueda y filtros adaptables */}
+        {/* Controles de búsqueda y filtros */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
           
           <input
@@ -177,7 +186,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* ENCABEZADO PARA IMPRESIÓN/PDF */}
+      {/* ENCABEZADO PARA IMPRESIÓN */}
       <div className="hidden print:block mb-4 text-center border-b pb-2">
         <h1 className="text-xl font-bold">Catálogo de Productos</h1>
         <p className="text-xs text-gray-600">
@@ -185,7 +194,7 @@ export default function CatalogoPage() {
         </p>
       </div>
 
-      {/* REJILLA DE PRODUCTOS (GRID RESPONSIVO) */}
+      {/* REJILLA DE PRODUCTOS */}
       {loading ? (
         <div className="text-center py-16 no-print">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent"></div>
@@ -196,7 +205,6 @@ export default function CatalogoPage() {
           No se encontraron productos para esta búsqueda.
         </div>
       ) : (
-        /* En móviles pequeños muestra 2 tarjetas por fila (grid-cols-2), en pantallas medianas 3 y en PC 4 */
         <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 grid-container">
           {filteredProducts.map((p) => {
             const cleanUrl = getCleanImageUrl(p.imagen_url);
@@ -208,20 +216,25 @@ export default function CatalogoPage() {
                 className="page-break bg-white border border-gray-200 rounded-xl p-2.5 sm:p-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <div>
-                  {/* Foto con soporte táctil */}
+                  {/* Foto clickeable */}
                   <div 
                     onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
-                    className={`w-full h-32 sm:h-40 bg-gray-50 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative touch-manipulation ${
-                      cleanUrl ? 'cursor-pointer active:scale-95 transition-transform' : ''
+                    className={`w-full h-32 sm:h-40 bg-gray-50 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative ${
+                      cleanUrl ? 'cursor-zoom-in group' : ''
                     }`}
                   >
                     {cleanUrl ? (
-                      <img
-                        src={cleanUrl}
-                        alt={p.descripcion}
-                        className="w-full h-full object-contain"
-                        loading="lazy"
-                      />
+                      <>
+                        <img
+                          src={cleanUrl}
+                          alt={p.descripcion}
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="bg-black/60 text-white text-[10px] px-2 py-1 rounded-full font-medium">🔍 Ampliar</span>
+                        </div>
+                      </>
                     ) : (
                       <span className="text-[10px] sm:text-xs text-gray-400">Sin Imagen</span>
                     )}
@@ -231,7 +244,14 @@ export default function CatalogoPage() {
                     {p.linea}
                   </div>
 
-                  <h3 className="text-[11px] sm:text-xs font-bold text-gray-800 line-clamp-2 leading-tight uppercase mb-1">
+                  {/* DESCRIPCIÓN CLICKEABLE (Amplía la imagen al dar clic) */}
+                  <h3 
+                    onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
+                    className={`text-[11px] sm:text-xs font-bold text-gray-800 line-clamp-2 leading-tight uppercase mb-1 transition-colors ${
+                      cleanUrl ? 'cursor-pointer hover:text-blue-600' : ''
+                    }`}
+                    title={cleanUrl ? "Haz clic para ver la imagen grande" : ""}
+                  >
                     {p.descripcion}
                   </h3>
 
@@ -267,33 +287,30 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* VENTANA EMERGENTE PARA MÓVILES Y COMPUTADORAS */}
+      {/* VISTA DE IMAGEN EN PANTALLA COMPLETA */}
       {previewImage && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.9)' }}
-          className="no-print flex items-center justify-center p-2 sm:p-4 touch-none backdrop-blur-sm"
+          style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.95)' }}
+          className="no-print flex items-center justify-center p-4 cursor-zoom-out backdrop-blur-md"
           onClick={() => setPreviewImage(null)}
         >
-          <div 
-            style={{ position: 'relative', maxWidth: '95vw', maxHeight: '90vh' }}
-            className="bg-white rounded-2xl p-2 shadow-2xl flex items-center justify-center overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
+          {/* Botón flotante para cerrar */}
+          <button
+            onClick={() => setPreviewImage(null)}
+            style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 100000 }}
+            className="bg-white/20 hover:bg-white/40 text-white rounded-full w-12 h-12 flex items-center justify-center text-2xl font-bold shadow-xl backdrop-blur-sm transition-all active:scale-90"
           >
-            {/* Botón de cierre agrandado para tocar fácilmente con el dedo */}
-            <button
-              onClick={() => setPreviewImage(null)}
-              style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 100000 }}
-              className="bg-black/80 hover:bg-black text-white rounded-full w-10 h-10 flex items-center justify-center text-xl font-bold shadow-lg transition-colors active:scale-90"
-            >
-              ✕
-            </button>
-            <img
-              src={previewImage}
-              alt="Vista ampliada"
-              style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain' }}
-              className="rounded-xl"
-            />
-          </div>
+            ✕
+          </button>
+
+          {/* Imagen limpia en alta resolución */}
+          <img
+            src={previewImage}
+            alt="Imagen ampliada"
+            style={{ maxHeight: '92vh', maxWidth: '92vw', objectFit: 'contain' }}
+            className="rounded-lg shadow-2xl transition-all duration-300 transform scale-100 select-none"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
