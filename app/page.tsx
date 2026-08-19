@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Configuración de Supabase
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
@@ -44,14 +43,13 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
-  // Estado para la vista de imagen completa
+  // Estado para el zoom de la imagen
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProducts();
   }, []);
 
-  // Cerrar modal con la tecla ESC
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPreviewImage(null);
@@ -71,31 +69,54 @@ export default function CatalogoPage() {
         .range(0, 2999);
 
       if (error) {
-        console.error('DETALLE ERROR SUPABASE:', error);
         setErrorMsg(`Error [${error.code}]: ${error.message}`);
       } else if (data) {
-        setProducts(data);
-        const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean);
-        setLineas(uniqueLineas as string[]);
+        // Filtrar inmediatamente productos que estén completamente vacíos en la BD
+        const validData = data.filter(
+          (p: Product) => (p.descripcion && p.descripcion.trim() !== '') || (p.referencia && p.referencia.trim() !== '')
+        );
+
+        setProducts(validData);
+
+        const uniqueLineas = Array.from(
+          new Set(validData.map((p: Product) => p.linea))
+        ).filter((l): l is string => Boolean(l && l.trim() !== ''));
+
+        setLineas(uniqueLineas);
       }
     } catch (err: any) {
-      console.error('EXCEPCION DE RED:', err);
-      setErrorMsg(`Excepción: ${err.message || 'Sin conexión al servidor'}`);
+      setErrorMsg(`Excepción: ${err.message || 'Sin conexión'}`);
     }
     
     setLoading(false);
   }
 
   const filteredProducts = products.filter((p) => {
+    // 1. Descartar productos vacíos o nulos
+    const hasNameOrRef = (p.descripcion && p.descripcion.trim() !== '') || (p.referencia && p.referencia.trim() !== '');
+    if (!hasNameOrRef) return false;
+
+    // 2. Aplicar filtro de línea
     const matchesLinea = selectedLinea === 'TODAS' || p.linea === selectedLinea;
+
+    // 3. Aplicar búsqueda de texto
     const matchesSearch =
-      p.descripcion?.toLowerCase().includes(search.toLowerCase()) ||
-      p.referencia?.toLowerCase().includes(search.toLowerCase());
+      (p.descripcion && p.descripcion.toLowerCase().includes(search.toLowerCase())) ||
+      (p.referencia && p.referencia.toLowerCase().includes(search.toLowerCase()));
+
     return matchesLinea && matchesSearch;
   });
 
   const getSelectedPrice = (product: Product) => {
     return product[priceList as keyof Product] ?? '0.00';
+  };
+
+  const handleOpenZoom = (url: string) => {
+    if (!url) {
+      alert('Este producto no tiene una imagen cargada.');
+      return;
+    }
+    setPreviewImage(url);
   };
 
   return (
@@ -115,7 +136,6 @@ export default function CatalogoPage() {
 
       {/* HEADER Y FILTROS */}
       <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
-        
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 flex items-center gap-2">
             📦 Catálogo de Productos
@@ -125,9 +145,7 @@ export default function CatalogoPage() {
           </p>
         </div>
 
-        {/* Controles de búsqueda y filtros */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
-          
           <input
             type="text"
             placeholder="Buscar código o nombre..."
@@ -186,14 +204,6 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* ENCABEZADO PARA IMPRESIÓN */}
-      <div className="hidden print:block mb-4 text-center border-b pb-2">
-        <h1 className="text-xl font-bold">Catálogo de Productos</h1>
-        <p className="text-xs text-gray-600">
-          Línea: <strong>{selectedLinea}</strong> | Total: {filteredProducts.length} productos
-        </p>
-      </div>
-
       {/* REJILLA DE PRODUCTOS */}
       {loading ? (
         <div className="text-center py-16 no-print">
@@ -202,7 +212,7 @@ export default function CatalogoPage() {
         </div>
       ) : filteredProducts.length === 0 ? (
         <div className="text-center py-16 text-gray-500 text-sm font-medium no-print">
-          No se encontraron productos para esta búsqueda.
+          No se encontraron productos válidos para esta búsqueda.
         </div>
       ) : (
         <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 grid-container">
@@ -216,12 +226,10 @@ export default function CatalogoPage() {
                 className="page-break bg-white border border-gray-200 rounded-xl p-2.5 sm:p-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <div>
-                  {/* Foto clickeable */}
+                  {/* Foto Clickeable */}
                   <div 
-                    onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
-                    className={`w-full h-32 sm:h-40 bg-gray-50 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative ${
-                      cleanUrl ? 'cursor-zoom-in group' : ''
-                    }`}
+                    onClick={() => handleOpenZoom(cleanUrl)}
+                    className="w-full h-32 sm:h-40 bg-gray-50 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative cursor-pointer group"
                   >
                     {cleanUrl ? (
                       <>
@@ -231,8 +239,8 @@ export default function CatalogoPage() {
                           className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
                           loading="lazy"
                         />
-                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <span className="bg-black/60 text-white text-[10px] px-2 py-1 rounded-full font-medium">🔍 Ampliar</span>
+                        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="bg-black/70 text-white text-[10px] px-2 py-1 rounded-full font-medium">🔍 Ampliar</span>
                         </div>
                       </>
                     ) : (
@@ -241,16 +249,13 @@ export default function CatalogoPage() {
                   </div>
 
                   <div className="text-[9px] sm:text-[10px] font-bold text-blue-600 uppercase tracking-wide truncate mb-0.5">
-                    {p.linea}
+                    {p.linea || 'SIN LÍNEA'}
                   </div>
 
-                  {/* DESCRIPCIÓN CLICKEABLE (Amplía la imagen al dar clic) */}
+                  {/* Descripción Clickeable */}
                   <h3 
-                    onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
-                    className={`text-[11px] sm:text-xs font-bold text-gray-800 line-clamp-2 leading-tight uppercase mb-1 transition-colors ${
-                      cleanUrl ? 'cursor-pointer hover:text-blue-600' : ''
-                    }`}
-                    title={cleanUrl ? "Haz clic para ver la imagen grande" : ""}
+                    onClick={() => handleOpenZoom(cleanUrl)}
+                    className="text-[11px] sm:text-xs font-bold text-gray-800 line-clamp-2 leading-tight uppercase mb-1 cursor-pointer hover:text-blue-600 transition-colors"
                   >
                     {p.descripcion}
                   </h3>
@@ -276,8 +281,8 @@ export default function CatalogoPage() {
 
                   <div className="text-right">
                     <div className="text-[8px] sm:text-[9px] text-gray-400 uppercase font-bold">Stock</div>
-                    <div className={`text-[11px] sm:text-xs font-bold ${p.existencia > 0 ? 'text-gray-700' : 'text-red-500'}`}>
-                      {p.existencia} und
+                    <div className={`text-[11px] sm:text-xs font-bold ${(p.existencia || 0) > 0 ? 'text-gray-700' : 'text-red-500'}`}>
+                      {p.existencia || 0} und
                     </div>
                   </div>
                 </div>
@@ -287,23 +292,21 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* VISTA DE IMAGEN EN PANTALLA COMPLETA */}
+      {/* VISOR DE PANTALLA COMPLETA */}
       {previewImage && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.95)' }}
           className="no-print flex items-center justify-center p-4 cursor-zoom-out backdrop-blur-md"
           onClick={() => setPreviewImage(null)}
         >
-          {/* Botón flotante para cerrar */}
           <button
             onClick={() => setPreviewImage(null)}
             style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 100000 }}
-            className="bg-white/20 hover:bg-white/40 text-white rounded-full w-12 h-12 flex items-center justify-center text-2xl font-bold shadow-xl backdrop-blur-sm transition-all active:scale-90"
+            className="bg-white/20 hover:bg-white/40 text-white rounded-full w-12 h-12 flex items-center justify-center text-2xl font-bold shadow-xl backdrop-blur-sm transition-all"
           >
             ✕
           </button>
 
-          {/* Imagen limpia en alta resolución */}
           <img
             src={previewImage}
             alt="Imagen ampliada"
