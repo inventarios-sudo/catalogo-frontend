@@ -9,7 +9,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 🔑 CAMBIA AQUÍ TU USUARIO Y CONTRASEÑA DE ACCESO
+// 🔑 CREDENCIALES DE ACCESO
 const USERNAME_VALIDO = 'admin';
 const PASSWORD_VALIDA = '123456';
 
@@ -39,13 +39,11 @@ function getCleanImageUrl(url: string | null | undefined): string {
 }
 
 export default function CatalogoPage() {
-  // Estado para el control de la Interfaz de Ingreso (Login)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [usuarioInput, setUsuarioInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
 
-  // Estados del Catálogo
   const [products, setProducts] = useState<Product[]>([]);
   const [lineas, setLineas] = useState<string[]>([]);
   const [selectedLinea, setSelectedLinea] = useState<string>('TODAS');
@@ -55,10 +53,8 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
-  // Estado para la vista de imagen completa
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Verificar si el usuario ya había iniciado sesión antes
   useEffect(() => {
     const logged = sessionStorage.getItem('catalogo_session_active');
     if (logged === 'true') {
@@ -67,7 +63,6 @@ export default function CatalogoPage() {
     }
   }, []);
 
-  // Cerrar vista previa de imagen con la tecla ESC
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPreviewImage(null);
@@ -76,7 +71,6 @@ export default function CatalogoPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Manejador del Formulario de Ingreso
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (usuarioInput === USERNAME_VALIDO && passwordInput === PASSWORD_VALIDA) {
@@ -89,7 +83,6 @@ export default function CatalogoPage() {
     }
   };
 
-  // Manejador para Cerrar Sesión
   const handleLogout = () => {
     sessionStorage.removeItem('catalogo_session_active');
     setIsAuthenticated(false);
@@ -108,7 +101,6 @@ export default function CatalogoPage() {
         .range(0, 2999);
 
       if (error) {
-        console.error('DETALLE ERROR SUPABASE:', error);
         setErrorMsg(`Error [${error.code}]: ${error.message}`);
       } else if (data) {
         setProducts(data);
@@ -116,18 +108,22 @@ export default function CatalogoPage() {
         setLineas(uniqueLineas as string[]);
       }
     } catch (err: any) {
-      console.error('EXCEPCION DE RED:', err);
       setErrorMsg(`Excepción: ${err.message || 'Sin conexión al servidor'}`);
     }
     
     setLoading(false);
   }
 
+  // 🔍 FILTRO DE BÚSQUEDA POR REFERENCIA Y DESCRIPCIÓN
   const filteredProducts = products.filter((p) => {
     const matchesLinea = selectedLinea === 'TODAS' || p.linea === selectedLinea;
+    const term = search.toLowerCase().trim();
+    
     const matchesSearch =
-      p.descripcion?.toLowerCase().includes(search.toLowerCase()) ||
-      p.referencia?.toLowerCase().includes(search.toLowerCase());
+      !term ||
+      (p.descripcion && p.descripcion.toLowerCase().includes(term)) ||
+      (p.referencia && p.referencia.toLowerCase().includes(term));
+
     return matchesLinea && matchesSearch;
   });
 
@@ -135,15 +131,10 @@ export default function CatalogoPage() {
     return product[priceList as keyof Product] ?? '0.00';
   };
 
-  // =============================================================
-  // INTERFAZ DE INGRESO (LOGIN)
-  // =============================================================
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden max-w-md w-full border border-gray-100">
-          
-          {/* Encabezado del Formulario */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-center text-white">
             <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-sm text-3xl shadow-inner">
               🔒
@@ -154,69 +145,53 @@ export default function CatalogoPage() {
             </p>
           </div>
 
-          {/* Formulario de Entrada */}
           <form onSubmit={handleLogin} className="p-6 sm:p-8 space-y-5">
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
                 Usuario
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Ej. admin"
-                  value={usuarioInput}
-                  onChange={(e) => setUsuarioInput(e.target.value)}
-                  className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-sm transition-all"
-                  required
-                />
-              </div>
+              <input
+                type="text"
+                placeholder="Ej. admin"
+                value={usuarioInput}
+                onChange={(e) => setUsuarioInput(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 text-gray-900 text-sm"
+                required
+              />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
                 Contraseña
               </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-sm transition-all"
-                  required
-                />
-              </div>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 text-gray-900 text-sm"
+                required
+              />
             </div>
 
-            {/* Alerta de Error */}
             {authError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-medium text-center animate-shake">
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-medium text-center">
                 {authError}
               </div>
             )}
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-blue-500/30 transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition-all"
             >
               Iniciar Sesión
             </button>
-
-            <div className="text-center pt-2">
-              <span className="text-[11px] text-gray-400">
-                Sistema de Inventarios & Catálogo Digital
-              </span>
-            </div>
           </form>
-
         </div>
       </div>
     );
   }
 
-  // =============================================================
-  // INTERFAZ DEL CATÁLOGO (Una vez autenticado)
-  // =============================================================
   return (
     <div className="min-h-screen bg-gray-100 p-2 sm:p-4 font-sans print:bg-white print:p-0">
       <style jsx global>{`
@@ -232,7 +207,7 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* HEADER Y FILTROS */}
+      {/* HEADER Y CONTROLES */}
       <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
         
         <div>
@@ -244,21 +219,21 @@ export default function CatalogoPage() {
           </p>
         </div>
 
-        {/* Controles de búsqueda y filtros */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
           
+          {/* BUSCADOR DE TEXTO NEGRO */}
           <input
             type="text"
-            placeholder="Buscar código o nombre..."
+            placeholder="Buscar por Ref o Nombre..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full sm:w-auto border border-gray-300 bg-white text-gray-900 placeholder-gray-400 font-medium rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
           <select
             value={selectedLinea}
             onChange={(e) => setSelectedLinea(e.target.value)}
-            className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full sm:w-auto border border-gray-300 text-gray-900 font-medium rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="TODAS">Todas las Líneas ({lineas.length})</option>
             {lineas.map((linea) => (
@@ -297,11 +272,9 @@ export default function CatalogoPage() {
             📄 Generar PDF
           </button>
 
-          {/* Botón para salir */}
           <button
             onClick={handleLogout}
             className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-            title="Cerrar Sesión"
           >
             🚪 Salir
           </button>
@@ -314,7 +287,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* REJILLA DE PRODUCTOS */}
+      {/* CATÁLOGO */}
       {loading ? (
         <div className="text-center py-16 no-print">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent"></div>
@@ -336,9 +309,10 @@ export default function CatalogoPage() {
                 className="page-break bg-white border border-gray-200 rounded-xl p-2.5 sm:p-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <div>
+                  {/* IMAGEN DE PRODUCTO CORREGIDA */}
                   <div 
                     onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
-                    className={`w-full h-32 sm:h-40 bg-gray-50 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative ${
+                    className={`w-full h-32 sm:h-40 bg-gray-100 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative ${
                       cleanUrl ? 'cursor-zoom-in group' : ''
                     }`}
                   >
@@ -346,7 +320,7 @@ export default function CatalogoPage() {
                       <>
                         <img
                           src={cleanUrl}
-                          alt={p.descripcion}
+                          alt=""
                           className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
                           loading="lazy"
                         />
@@ -355,7 +329,10 @@ export default function CatalogoPage() {
                         </div>
                       </>
                     ) : (
-                      <span className="text-[10px] sm:text-xs text-gray-400">Sin Imagen</span>
+                      <div className="text-center text-gray-400">
+                        <span className="text-2xl block mb-0.5">🖼️</span>
+                        <span className="text-[10px] font-medium">Sin Imagen</span>
+                      </div>
                     )}
                   </div>
 
@@ -365,15 +342,15 @@ export default function CatalogoPage() {
 
                   <h3 
                     onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
-                    className={`text-[11px] sm:text-xs font-bold text-gray-800 line-clamp-2 leading-tight uppercase mb-1 transition-colors ${
+                    className={`text-[11px] sm:text-xs font-bold text-gray-900 line-clamp-2 leading-tight uppercase mb-1 transition-colors ${
                       cleanUrl ? 'cursor-pointer hover:text-blue-600' : ''
                     }`}
                   >
                     {p.descripcion}
                   </h3>
 
-                  <div className="text-[10px] sm:text-[11px] text-gray-500 mb-2">
-                    Ref: <span className="font-mono text-gray-700">{p.referencia}</span>
+                  <div className="text-[10px] sm:text-[11px] text-gray-600 mb-2">
+                    Ref: <span className="font-mono font-bold text-gray-900">{p.referencia}</span>
                   </div>
                 </div>
 
@@ -393,7 +370,7 @@ export default function CatalogoPage() {
 
                   <div className="text-right">
                     <div className="text-[8px] sm:text-[9px] text-gray-400 uppercase font-bold">Stock</div>
-                    <div className={`text-[11px] sm:text-xs font-bold ${p.existencia > 0 ? 'text-gray-700' : 'text-red-500'}`}>
+                    <div className={`text-[11px] sm:text-xs font-bold ${p.existencia > 0 ? 'text-gray-900' : 'text-red-500'}`}>
                       {p.existencia} und
                     </div>
                   </div>
@@ -404,7 +381,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* VISTA DE IMAGEN EN PANTALLA COMPLETA */}
+      {/* AMPLIFICAR IMAGEN */}
       {previewImage && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.95)' }}
