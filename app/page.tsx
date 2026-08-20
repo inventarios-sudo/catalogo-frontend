@@ -3,10 +3,15 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+// Configuración de Supabase
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 🔑 CAMBIA AQUÍ TU USUARIO Y CONTRASEÑA DE ACCESO
+const USERNAME_VALIDO = 'admin';
+const PASSWORD_VALIDA = '123456';
 
 interface Product {
   id: number;
@@ -34,6 +39,13 @@ function getCleanImageUrl(url: string | null | undefined): string {
 }
 
 export default function CatalogoPage() {
+  // Estado para el control de la Interfaz de Ingreso (Login)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [usuarioInput, setUsuarioInput] = useState<string>('');
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [authError, setAuthError] = useState<string>('');
+
+  // Estados del Catálogo
   const [products, setProducts] = useState<Product[]>([]);
   const [lineas, setLineas] = useState<string[]>([]);
   const [selectedLinea, setSelectedLinea] = useState<string>('TODAS');
@@ -43,13 +55,19 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
-  // Estado para el zoom de la imagen
+  // Estado para la vista de imagen completa
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  // Verificar si el usuario ya había iniciado sesión antes
   useEffect(() => {
-    fetchProducts();
+    const logged = sessionStorage.getItem('catalogo_session_active');
+    if (logged === 'true') {
+      setIsAuthenticated(true);
+      fetchProducts();
+    }
   }, []);
 
+  // Cerrar vista previa de imagen con la tecla ESC
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPreviewImage(null);
@@ -57,6 +75,27 @@ export default function CatalogoPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Manejador del Formulario de Ingreso
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (usuarioInput === USERNAME_VALIDO && passwordInput === PASSWORD_VALIDA) {
+      sessionStorage.setItem('catalogo_session_active', 'true');
+      setIsAuthenticated(true);
+      setAuthError('');
+      fetchProducts();
+    } else {
+      setAuthError('❌ Usuario o contraseña incorrectos');
+    }
+  };
+
+  // Manejador para Cerrar Sesión
+  const handleLogout = () => {
+    sessionStorage.removeItem('catalogo_session_active');
+    setIsAuthenticated(false);
+    setUsuarioInput('');
+    setPasswordInput('');
+  };
 
   async function fetchProducts() {
     setLoading(true);
@@ -69,41 +108,26 @@ export default function CatalogoPage() {
         .range(0, 2999);
 
       if (error) {
+        console.error('DETALLE ERROR SUPABASE:', error);
         setErrorMsg(`Error [${error.code}]: ${error.message}`);
       } else if (data) {
-        // Filtrar inmediatamente productos que estén completamente vacíos en la BD
-        const validData = data.filter(
-          (p: Product) => (p.descripcion && p.descripcion.trim() !== '') || (p.referencia && p.referencia.trim() !== '')
-        );
-
-        setProducts(validData);
-
-        const uniqueLineas = Array.from(
-          new Set(validData.map((p: Product) => p.linea))
-        ).filter((l): l is string => Boolean(l && l.trim() !== ''));
-
-        setLineas(uniqueLineas);
+        setProducts(data);
+        const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean);
+        setLineas(uniqueLineas as string[]);
       }
     } catch (err: any) {
-      setErrorMsg(`Excepción: ${err.message || 'Sin conexión'}`);
+      console.error('EXCEPCION DE RED:', err);
+      setErrorMsg(`Excepción: ${err.message || 'Sin conexión al servidor'}`);
     }
     
     setLoading(false);
   }
 
   const filteredProducts = products.filter((p) => {
-    // 1. Descartar productos vacíos o nulos
-    const hasNameOrRef = (p.descripcion && p.descripcion.trim() !== '') || (p.referencia && p.referencia.trim() !== '');
-    if (!hasNameOrRef) return false;
-
-    // 2. Aplicar filtro de línea
     const matchesLinea = selectedLinea === 'TODAS' || p.linea === selectedLinea;
-
-    // 3. Aplicar búsqueda de texto
     const matchesSearch =
-      (p.descripcion && p.descripcion.toLowerCase().includes(search.toLowerCase())) ||
-      (p.referencia && p.referencia.toLowerCase().includes(search.toLowerCase()));
-
+      p.descripcion?.toLowerCase().includes(search.toLowerCase()) ||
+      p.referencia?.toLowerCase().includes(search.toLowerCase());
     return matchesLinea && matchesSearch;
   });
 
@@ -111,14 +135,88 @@ export default function CatalogoPage() {
     return product[priceList as keyof Product] ?? '0.00';
   };
 
-  const handleOpenZoom = (url: string) => {
-    if (!url) {
-      alert('Este producto no tiene una imagen cargada.');
-      return;
-    }
-    setPreviewImage(url);
-  };
+  // =============================================================
+  // INTERFAZ DE INGRESO (LOGIN)
+  // =============================================================
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden max-w-md w-full border border-gray-100">
+          
+          {/* Encabezado del Formulario */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-center text-white">
+            <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-sm text-3xl shadow-inner">
+              🔒
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight">Acceso al Catálogo</h2>
+            <p className="text-xs text-blue-100 mt-1">
+              Ingresa tus credenciales autorizadas para continuar
+            </p>
+          </div>
 
+          {/* Formulario de Entrada */}
+          <form onSubmit={handleLogin} className="p-6 sm:p-8 space-y-5">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                Usuario
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Ej. admin"
+                  value={usuarioInput}
+                  onChange={(e) => setUsuarioInput(e.target.value)}
+                  className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-sm transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                Contraseña
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-sm transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Alerta de Error */}
+            {authError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-medium text-center animate-shake">
+                {authError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-blue-500/30 transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
+            >
+              Iniciar Sesión
+            </button>
+
+            <div className="text-center pt-2">
+              <span className="text-[11px] text-gray-400">
+                Sistema de Inventarios & Catálogo Digital
+              </span>
+            </div>
+          </form>
+
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================================
+  // INTERFAZ DEL CATÁLOGO (Una vez autenticado)
+  // =============================================================
   return (
     <div className="min-h-screen bg-gray-100 p-2 sm:p-4 font-sans print:bg-white print:p-0">
       <style jsx global>{`
@@ -136,6 +234,7 @@ export default function CatalogoPage() {
 
       {/* HEADER Y FILTROS */}
       <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
+        
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 flex items-center gap-2">
             📦 Catálogo de Productos
@@ -145,7 +244,9 @@ export default function CatalogoPage() {
           </p>
         </div>
 
+        {/* Controles de búsqueda y filtros */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
+          
           <input
             type="text"
             placeholder="Buscar código o nombre..."
@@ -195,6 +296,15 @@ export default function CatalogoPage() {
           >
             📄 Generar PDF
           </button>
+
+          {/* Botón para salir */}
+          <button
+            onClick={handleLogout}
+            className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+            title="Cerrar Sesión"
+          >
+            🚪 Salir
+          </button>
         </div>
       </div>
 
@@ -212,7 +322,7 @@ export default function CatalogoPage() {
         </div>
       ) : filteredProducts.length === 0 ? (
         <div className="text-center py-16 text-gray-500 text-sm font-medium no-print">
-          No se encontraron productos válidos para esta búsqueda.
+          No se encontraron productos para esta búsqueda.
         </div>
       ) : (
         <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 grid-container">
@@ -226,10 +336,11 @@ export default function CatalogoPage() {
                 className="page-break bg-white border border-gray-200 rounded-xl p-2.5 sm:p-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <div>
-                  {/* Foto Clickeable */}
                   <div 
-                    onClick={() => handleOpenZoom(cleanUrl)}
-                    className="w-full h-32 sm:h-40 bg-gray-50 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative cursor-pointer group"
+                    onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
+                    className={`w-full h-32 sm:h-40 bg-gray-50 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative ${
+                      cleanUrl ? 'cursor-zoom-in group' : ''
+                    }`}
                   >
                     {cleanUrl ? (
                       <>
@@ -239,8 +350,8 @@ export default function CatalogoPage() {
                           className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
                           loading="lazy"
                         />
-                        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <span className="bg-black/70 text-white text-[10px] px-2 py-1 rounded-full font-medium">🔍 Ampliar</span>
+                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="bg-black/60 text-white text-[10px] px-2 py-1 rounded-full font-medium">🔍 Ampliar</span>
                         </div>
                       </>
                     ) : (
@@ -249,13 +360,14 @@ export default function CatalogoPage() {
                   </div>
 
                   <div className="text-[9px] sm:text-[10px] font-bold text-blue-600 uppercase tracking-wide truncate mb-0.5">
-                    {p.linea || 'SIN LÍNEA'}
+                    {p.linea}
                   </div>
 
-                  {/* Descripción Clickeable */}
                   <h3 
-                    onClick={() => handleOpenZoom(cleanUrl)}
-                    className="text-[11px] sm:text-xs font-bold text-gray-800 line-clamp-2 leading-tight uppercase mb-1 cursor-pointer hover:text-blue-600 transition-colors"
+                    onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
+                    className={`text-[11px] sm:text-xs font-bold text-gray-800 line-clamp-2 leading-tight uppercase mb-1 transition-colors ${
+                      cleanUrl ? 'cursor-pointer hover:text-blue-600' : ''
+                    }`}
                   >
                     {p.descripcion}
                   </h3>
@@ -281,8 +393,8 @@ export default function CatalogoPage() {
 
                   <div className="text-right">
                     <div className="text-[8px] sm:text-[9px] text-gray-400 uppercase font-bold">Stock</div>
-                    <div className={`text-[11px] sm:text-xs font-bold ${(p.existencia || 0) > 0 ? 'text-gray-700' : 'text-red-500'}`}>
-                      {p.existencia || 0} und
+                    <div className={`text-[11px] sm:text-xs font-bold ${p.existencia > 0 ? 'text-gray-700' : 'text-red-500'}`}>
+                      {p.existencia} und
                     </div>
                   </div>
                 </div>
@@ -292,7 +404,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* VISOR DE PANTALLA COMPLETA */}
+      {/* VISTA DE IMAGEN EN PANTALLA COMPLETA */}
       {previewImage && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.95)' }}
@@ -302,7 +414,7 @@ export default function CatalogoPage() {
           <button
             onClick={() => setPreviewImage(null)}
             style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 100000 }}
-            className="bg-white/20 hover:bg-white/40 text-white rounded-full w-12 h-12 flex items-center justify-center text-2xl font-bold shadow-xl backdrop-blur-sm transition-all"
+            className="bg-white/20 hover:bg-white/40 text-white rounded-full w-12 h-12 flex items-center justify-center text-2xl font-bold shadow-xl backdrop-blur-sm transition-all active:scale-90"
           >
             ✕
           </button>
