@@ -231,7 +231,7 @@ function CatalogoContent() {
               </label>
               <input
                 type="text"
-                placeholder="Ej. Ernesto Punina o ernesto.punina"
+                placeholder=""
                 value={usuarioInput}
                 onChange={(e) => setUsuarioInput(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 text-gray-900 text-sm"
@@ -245,7 +245,7 @@ function CatalogoContent() {
               </label>
               <input
                 type="password"
-                placeholder="••••••••"
+                placeholder=""
                 value={passwordInput}
                 onChange={(e) => setPasswordInput(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 text-gray-900 text-sm"
