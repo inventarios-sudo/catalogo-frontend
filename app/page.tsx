@@ -9,9 +9,32 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 🔑 CREDENCIALES DE ACCESO
-const USERNAME_VALIDO = 'admin';
-const PASSWORD_VALIDA = '123456';
+// 👥 LISTA DE USUARIOS Y CONTRASEÑAS AUTORIZADAS
+const USUARIOS_PERMITIDOS: Record<string, string> = {
+  admin: '123456',
+  'ernesto punina': 'ernesto.punina',
+  'ronald castro': 'ronald.castro',
+  'franklin guaman': 'franklin.guaman',
+  'marina flores': 'marina.flores',
+  'hector morales': 'hector.morales',
+  'pablo llumiquinga': 'pablo.llumiquinga',
+  'cristian martinez': 'cristian.martinez',
+  'alexander baquero': 'alexander.baquero',
+  'gabriela flores': 'gabriela.flores',
+  'gabrielaflores': 'gabriela.flores',
+  'madeleine vizcaino': 'madeleine.vizcaino',
+  // Formatos alternativos en minúscula con punto como usuario
+  'ernesto.punina': 'ernesto.punina',
+  'ronald.castro': 'ronald.castro',
+  'franklin.guaman': 'franklin.guaman',
+  'marina.flores': 'marina.flores',
+  'hector.morales': 'hector.morales',
+  'pablo.llumiquinga': 'pablo.llumiquinga',
+  'cristian.martinez': 'cristian.martinez',
+  'alexander.baquero': 'alexander.baquero',
+  'gabriela.flores': 'gabriela.flores',
+  'madeleine.vizcaino': 'madeleine.vizcaino',
+};
 
 interface Product {
   id: number;
@@ -71,9 +94,13 @@ export default function CatalogoPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // 🔐 MANEJADOR DE AUTENTICACIÓN MULTI-USUARIO
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (usuarioInput === USERNAME_VALIDO && passwordInput === PASSWORD_VALIDA) {
+    const userClean = usuarioInput.toLowerCase().trim();
+    const passClean = passwordInput.trim();
+
+    if (USUARIOS_PERMITIDOS[userClean] && USUARIOS_PERMITIDOS[userClean] === passClean) {
       sessionStorage.setItem('catalogo_session_active', 'true');
       setIsAuthenticated(true);
       setAuthError('');
@@ -114,7 +141,7 @@ export default function CatalogoPage() {
     setLoading(false);
   }
 
-  // 🔍 FILTRO DE BÚSQUEDA POR REFERENCIA Y DESCRIPCIÓN
+  // 🔍 BUSCADOR POR REFERENCIA Y DESCRIPCIÓN
   const filteredProducts = products.filter((p) => {
     const matchesLinea = selectedLinea === 'TODAS' || p.linea === selectedLinea;
     const term = search.toLowerCase().trim();
@@ -129,6 +156,46 @@ export default function CatalogoPage() {
 
   const getSelectedPrice = (product: Product) => {
     return product[priceList as keyof Product] ?? '0.00';
+  };
+
+  // 📲 ENVIAR A WHATSAPP
+  const handleShareWhatsApp = () => {
+    if (filteredProducts.length === 0) return;
+
+    let mensaje = `📋 *CATÁLOGO DE PRODUCTOS*\n`;
+    if (selectedLinea !== 'TODAS') {
+      mensaje += `Línea: *${selectedLinea}*\n`;
+    }
+    mensaje += `-----------------------------------\n\n`;
+
+    const maxItems = Math.min(filteredProducts.length, 30);
+    const itemsToShare = filteredProducts.slice(0, maxItems);
+
+    itemsToShare.forEach((p) => {
+      const precio = getSelectedPrice(p);
+      const precioFormatted = typeof precio === 'number' ? precio.toFixed(2) : precio;
+      
+      mensaje += `🔹 *${p.descripcion}*\n`;
+      mensaje += `   • Ref: \`${p.referencia}\` | Stock: ${p.existencia} und\n`;
+      if (showPrices) {
+        mensaje += `   • Precio (${priceList.toUpperCase()}): *$${precioFormatted}*\n`;
+      }
+      mensaje += `\n`;
+    });
+
+    if (filteredProducts.length > maxItems) {
+      mensaje += `_...y ${filteredProducts.length - maxItems} productos más en el catálogo._\n\n`;
+    }
+
+    mensaje += `_Consúltanos para realizar tu pedido._`;
+
+    const urlWhatsApp = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
+    window.open(urlWhatsApp, '_blank');
+  };
+
+  const handlePrintPDF = () => {
+    document.title = 'CATÁLOGO DE PRODUCTOS';
+    window.print();
   };
 
   if (!isAuthenticated) {
@@ -152,7 +219,7 @@ export default function CatalogoPage() {
               </label>
               <input
                 type="text"
-                placeholder="Ej. admin"
+                placeholder="Ej. Ernesto Punina o ernesto.punina"
                 value={usuarioInput}
                 onChange={(e) => setUsuarioInput(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 text-gray-900 text-sm"
@@ -207,7 +274,7 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* HEADER Y CONTROLES */}
+      {/* FILTROS Y BÚSQUEDA */}
       <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
         
         <div>
@@ -221,7 +288,6 @@ export default function CatalogoPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
           
-          {/* BUSCADOR DE TEXTO NEGRO */}
           <input
             type="text"
             placeholder="Buscar por Ref o Nombre..."
@@ -266,7 +332,14 @@ export default function CatalogoPage() {
           </label>
 
           <button
-            onClick={() => window.print()}
+            onClick={handleShareWhatsApp}
+            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+          >
+            📲 Enviar WhatsApp
+          </button>
+
+          <button
+            onClick={handlePrintPDF}
             className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
           >
             📄 Generar PDF
@@ -287,7 +360,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* CATÁLOGO */}
+      {/* CATÁLOGO DE PRODUCTOS */}
       {loading ? (
         <div className="text-center py-16 no-print">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent"></div>
@@ -309,7 +382,6 @@ export default function CatalogoPage() {
                 className="page-break bg-white border border-gray-200 rounded-xl p-2.5 sm:p-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <div>
-                  {/* IMAGEN DE PRODUCTO CORREGIDA */}
                   <div 
                     onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
                     className={`w-full h-32 sm:h-40 bg-gray-100 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative ${
@@ -381,7 +453,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* AMPLIFICAR IMAGEN */}
+      {/* MODAL AMPLIFICAR IMAGEN */}
       {previewImage && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.95)' }}
