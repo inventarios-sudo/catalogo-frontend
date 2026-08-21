@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
 // Configuración de Supabase
@@ -23,7 +24,6 @@ const USUARIOS_PERMITIDOS: Record<string, string> = {
   'gabriela flores': 'gabriela.flores',
   'gabrielaflores': 'gabriela.flores',
   'madeleine vizcaino': 'madeleine.vizcaino',
-  // Formatos alternativos en minúscula con punto como usuario
   'ernesto.punina': 'ernesto.punina',
   'ronald.castro': 'ronald.castro',
   'franklin.guaman': 'franklin.guaman',
@@ -61,7 +61,10 @@ function getCleanImageUrl(url: string | null | undefined): string {
   return url.trim();
 }
 
-export default function CatalogoPage() {
+function CatalogoContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [usuarioInput, setUsuarioInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
@@ -69,10 +72,13 @@ export default function CatalogoPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [lineas, setLineas] = useState<string[]>([]);
-  const [selectedLinea, setSelectedLinea] = useState<string>('TODAS');
+  
+  // Leer parámetros iniciales de la URL si existen
+  const [selectedLinea, setSelectedLinea] = useState<string>(searchParams.get('linea') || 'TODAS');
+  const [search, setSearch] = useState<string>(searchParams.get('q') || '');
+  
   const [priceList, setPriceList] = useState<string>('pvp1');
   const [showPrices, setShowPrices] = useState<boolean>(true);
-  const [search, setSearch] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
@@ -94,7 +100,28 @@ export default function CatalogoPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // 🔐 MANEJADOR DE AUTENTICACIÓN MULTI-USUARIO
+  // Actualizar la URL dinámicamente cuando cambian los filtros
+  const updateQueryParams = (linea: string, query: string) => {
+    const params = new URLSearchParams();
+    if (linea && linea !== 'TODAS') params.set('linea', linea);
+    if (query && query.trim() !== '') params.set('q', query);
+    
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    router.replace(newUrl, { scroll: false });
+  };
+
+  const handleLineaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setSelectedLinea(val);
+    updateQueryParams(val, search);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearch(val);
+    updateQueryParams(selectedLinea, val);
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const userClean = usuarioInput.toLowerCase().trim();
@@ -158,35 +185,20 @@ export default function CatalogoPage() {
     return product[priceList as keyof Product] ?? '0.00';
   };
 
-  // 📲 ENVIAR A WHATSAPP
-  const handleShareWhatsApp = () => {
-    if (filteredProducts.length === 0) return;
+  // 📲 ENVIAR ENLACE DIRECTO POR WHATSAPP
+  const handleShareWhatsAppLink = () => {
+    const currentUrl = window.location.href;
 
-    let mensaje = `📋 *CATÁLOGO DE PRODUCTOS*\n`;
+    let mensaje = `📋 *CATÁLOGO DIGITAL DE PRODUCTOS*\n`;
     if (selectedLinea !== 'TODAS') {
       mensaje += `Línea: *${selectedLinea}*\n`;
     }
-    mensaje += `-----------------------------------\n\n`;
-
-    const maxItems = Math.min(filteredProducts.length, 30);
-    const itemsToShare = filteredProducts.slice(0, maxItems);
-
-    itemsToShare.forEach((p) => {
-      const precio = getSelectedPrice(p);
-      const precioFormatted = typeof precio === 'number' ? precio.toFixed(2) : precio;
-      
-      mensaje += `🔹 *${p.descripcion}*\n`;
-      mensaje += `   • Ref: \`${p.referencia}\` | Stock: ${p.existencia} und\n`;
-      if (showPrices) {
-        mensaje += `   • Precio (${priceList.toUpperCase()}): *$${precioFormatted}*\n`;
-      }
-      mensaje += `\n`;
-    });
-
-    if (filteredProducts.length > maxItems) {
-      mensaje += `_...y ${filteredProducts.length - maxItems} productos más en el catálogo._\n\n`;
+    if (search.trim() !== '') {
+      mensaje += `Búsqueda: *${search}*\n`;
     }
-
+    mensaje += `-----------------------------------\n\n`;
+    mensaje += `Haz clic en el siguiente enlace para ver la selección de productos y sus fotos:\n\n`;
+    mensaje += `🔗 ${currentUrl}\n\n`;
     mensaje += `_Consúltanos para realizar tu pedido._`;
 
     const urlWhatsApp = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
@@ -274,7 +286,7 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* FILTROS Y BÚSQUEDA */}
+      {/* FILTROS Y CONTROLES */}
       <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
         
         <div>
@@ -292,13 +304,13 @@ export default function CatalogoPage() {
             type="text"
             placeholder="Buscar por Ref o Nombre..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={handleSearchChange}
             className="w-full sm:w-auto border border-gray-300 bg-white text-gray-900 placeholder-gray-400 font-medium rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
           <select
             value={selectedLinea}
-            onChange={(e) => setSelectedLinea(e.target.value)}
+            onChange={handleLineaChange}
             className="w-full sm:w-auto border border-gray-300 text-gray-900 font-medium rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="TODAS">Todas las Líneas ({lineas.length})</option>
@@ -332,10 +344,11 @@ export default function CatalogoPage() {
           </label>
 
           <button
-            onClick={handleShareWhatsApp}
+            onClick={handleShareWhatsAppLink}
             className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+            title="Compartir enlace filtrado a WhatsApp"
           >
-            📲 Enviar WhatsApp
+            📲 Enviar Enlace por WhatsApp
           </button>
 
           <button
@@ -360,7 +373,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* CATÁLOGO DE PRODUCTOS */}
+      {/* TARJETAS DE PRODUCTO */}
       {loading ? (
         <div className="text-center py-16 no-print">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent"></div>
@@ -375,6 +388,7 @@ export default function CatalogoPage() {
           {filteredProducts.map((p) => {
             const cleanUrl = getCleanImageUrl(p.imagen_url);
             const price = getSelectedPrice(p);
+            const stockVal = p.existencia ?? 0;
 
             return (
               <div
@@ -442,8 +456,8 @@ export default function CatalogoPage() {
 
                   <div className="text-right">
                     <div className="text-[8px] sm:text-[9px] text-gray-400 uppercase font-bold">Stock</div>
-                    <div className={`text-[11px] sm:text-xs font-bold ${p.existencia > 0 ? 'text-gray-900' : 'text-red-500'}`}>
-                      {p.existencia} und
+                    <div className={`text-[11px] sm:text-xs font-bold ${stockVal > 0 ? 'text-gray-900' : 'text-red-500'}`}>
+                      {stockVal} und
                     </div>
                   </div>
                 </div>
@@ -478,5 +492,13 @@ export default function CatalogoPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CatalogoPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-16">Cargando aplicación...</div>}>
+      <CatalogoContent />
+    </Suspense>
   );
 }
