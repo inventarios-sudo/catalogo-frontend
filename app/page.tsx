@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect, Suspense, useTransition } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { processAndUploadCatalog } from '@/app/actions/upload-catalog';
 
 // Configuración de Supabase
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
@@ -66,6 +65,7 @@ function CatalogoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // Detectar si el usuario ingresó por escaneo de QR
   const isPublicView = searchParams.get('mode') === 'view';
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -76,6 +76,7 @@ function CatalogoContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [lineas, setLineas] = useState<string[]>([]);
   
+  // Leer parámetros de la URL
   const [selectedLinea, setSelectedLinea] = useState<string>(searchParams.get('linea') || 'TODAS');
   const [search, setSearch] = useState<string>(searchParams.get('q') || '');
   const [priceList, setPriceList] = useState<string>(searchParams.get('list') || 'pvp1');
@@ -87,12 +88,6 @@ function CatalogoContent() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showQRModal, setShowQRModal] = useState<boolean>(false);
   const [qrUrl, setQrUrl] = useState<string>('');
-
-  // Estados para la automatización de carga Excel
-  const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadMessage, setUploadMessage] = useState<string>('');
-  const [, startTransition] = useTransition();
 
   useEffect(() => {
     if (isPublicView) {
@@ -199,32 +194,6 @@ function CatalogoContent() {
     
     setLoading(false);
   }
-
-  const handleUploadCatalog = () => {
-    if (!file) {
-      setUploadMessage('⚠️ Por favor selecciona un archivo Excel (.xlsx, .xls) o .csv');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadMessage('⌛ Cargando y actualizando productos...');
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    startTransition(async () => {
-      const response = await processAndUploadCatalog(formData);
-
-      if (response.success) {
-        setUploadMessage(`✅ ¡Éxito! Se actualizaron ${response.count} productos.`);
-        setFile(null);
-        fetchProducts();
-      } else {
-        setUploadMessage(`❌ Error: ${response.error}`);
-      }
-      setIsUploading(false);
-    });
-  };
 
   const getPublicShareUrl = () => {
     const baseUrl = window.location.origin + window.location.pathname;
@@ -342,7 +311,7 @@ function CatalogoContent() {
         }
       `}</style>
 
-      {/* ENCABEZADO MODO CLIENTE */}
+      {/* ENCABEZADO MODO CLIENTE (LECTURA DESDE CÓDIGO QR) */}
       {isPublicView && (
         <div className="no-print max-w-7xl mx-auto bg-white p-4 rounded-2xl shadow-sm border border-gray-200 mb-4 text-center">
           <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900">
@@ -356,119 +325,85 @@ function CatalogoContent() {
         </div>
       )}
 
-      {/* BARRA DE CONTROLES */}
+      {/* BARRA DE CONTROLES (SOLO VISIBLE PARA EL VENDEDOR AUTENTICADO) */}
       {!isPublicView && (
-        <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col gap-4">
+        <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
           
-          {/* PANEL DE ACTUALIZACIÓN MASIVA (AUTOMATIZACIÓN EXCEL) */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
-              ⚙️ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo
-            </h2>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <input
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="text-xs text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer w-full sm:w-auto"
-              />
-
-              <button
-                onClick={handleUploadCatalog}
-                disabled={isUploading || !file}
-                className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all w-full sm:w-auto ${
-                  isUploading || !file ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow'
-                }`}
-              >
-                {isUploading ? '🚀 Actualizando...' : '🚀 Actualizar Catálogo'}
-              </button>
-            </div>
-
-            {uploadMessage && (
-              <p className="text-xs mt-2 font-medium text-slate-700">
-                {uploadMessage}
-              </p>
-            )}
+          <div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 flex items-center gap-2">
+              📦 Catálogo de Productos
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+              Mostrando: <span className="font-bold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
+            </p>
           </div>
 
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 flex items-center gap-2">
-                📦 Catálogo de Productos
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                Mostrando: <span className="font-bold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
-              </p>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
+            
+            <input
+              type="text"
+              placeholder="Buscar por Ref o Nombre..."
+              value={search}
+              onChange={handleSearchChange}
+              className="w-full sm:w-auto border border-gray-300 bg-white text-gray-900 placeholder-gray-400 font-medium rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
-              
+            <select
+              value={selectedLinea}
+              onChange={handleLineaChange}
+              className="w-full sm:w-auto border border-gray-300 text-gray-900 font-medium rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="TODAS">Todas las Líneas ({lineas.length})</option>
+              {lineas.map((linea) => (
+                <option key={linea} value={linea}>
+                  {linea}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={priceList}
+              onChange={handlePriceListChange}
+              className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-blue-50 text-blue-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="pvp1">Lista PVP 1</option>
+              <option value="pvp3">Lista PVP 3</option>
+              <option value="pvp4">Lista PVP 4</option>
+              <option value="pvp5">Lista PVP 5</option>
+              <option value="pvp6">Lista PVP 6</option>
+            </select>
+
+            <label className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 cursor-pointer select-none">
               <input
-                type="text"
-                placeholder="Buscar por Ref o Nombre..."
-                value={search}
-                onChange={handleSearchChange}
-                className="w-full sm:w-auto border border-gray-300 bg-white text-gray-900 placeholder-gray-400 font-medium rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                type="checkbox"
+                checked={showPrices}
+                onChange={handlePricesToggle}
+                className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
               />
+              Ver Precios
+            </label>
 
-              <select
-                value={selectedLinea}
-                onChange={handleLineaChange}
-                className="w-full sm:w-auto border border-gray-300 text-gray-900 font-medium rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="TODAS">Todas las Líneas ({lineas.length})</option>
-                {lineas.map((linea) => (
-                  <option key={linea} value={linea}>
-                    {linea}
-                  </option>
-                ))}
-              </select>
+            <button
+              onClick={handleGenerateQR}
+              className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+              title="Generar código QR"
+            >
+              📷 Generar QR
+            </button>
 
-              <select
-                value={priceList}
-                onChange={handlePriceListChange}
-                className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-blue-50 text-blue-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="pvp1">Lista PVP 1</option>
-                <option value="pvp3">Lista PVP 3</option>
-                <option value="pvp4">Lista PVP 4</option>
-                <option value="pvp5">Lista PVP 5</option>
-                <option value="pvp6">Lista PVP 6</option>
-              </select>
+            <button
+              onClick={handlePrintPDF}
+              className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
+            >
+              📄 PDF
+            </button>
 
-              <label className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showPrices}
-                  onChange={handlePricesToggle}
-                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                />
-                Ver Precios
-              </label>
-
-              <button
-                onClick={handleGenerateQR}
-                className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-                title="Generar código QR"
-              >
-                📷 Generar QR
-              </button>
-
-              <button
-                onClick={handlePrintPDF}
-                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
-              >
-                📄 PDF
-              </button>
-
-              <button
-                onClick={handleLogout}
-                className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-              >
-                🚪 Salir
-              </button>
-            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+            >
+              🚪 Salir
+            </button>
           </div>
         </div>
       )}
