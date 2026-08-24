@@ -76,12 +76,14 @@ function CatalogoContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [lineas, setLineas] = useState<string[]>([]);
   
-  // Leer parámetros de la URL
+  // Leer parámetros de la URL (incluyendo visibilidad de precios y lista seleccionada)
   const [selectedLinea, setSelectedLinea] = useState<string>(searchParams.get('linea') || 'TODAS');
   const [search, setSearch] = useState<string>(searchParams.get('q') || '');
+  const [priceList, setPriceList] = useState<string>(searchParams.get('list') || 'pvp1');
   
-  const [priceList, setPriceList] = useState<string>('pvp1');
-  const [showPrices, setShowPrices] = useState<boolean>(true);
+  // Si en la URL viene 'prices=false', no muestra precios. Por defecto está activo (true).
+  const [showPrices, setShowPrices] = useState<boolean>(searchParams.get('prices') !== 'false');
+  
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   
@@ -113,11 +115,13 @@ function CatalogoContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const updateQueryParams = (linea: string, query: string) => {
+  const updateQueryParams = (linea: string, query: string, visiblePrices: boolean, listPvp: string) => {
     const params = new URLSearchParams();
     if (isPublicView) params.set('mode', 'view');
     if (linea && linea !== 'TODAS') params.set('linea', linea);
     if (query && query.trim() !== '') params.set('q', query);
+    if (!visiblePrices) params.set('prices', 'false');
+    if (listPvp && listPvp !== 'pvp1') params.set('list', listPvp);
     
     const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
     router.replace(newUrl, { scroll: false });
@@ -126,13 +130,25 @@ function CatalogoContent() {
   const handleLineaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setSelectedLinea(val);
-    updateQueryParams(val, search);
+    updateQueryParams(val, search, showPrices, priceList);
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearch(val);
-    updateQueryParams(selectedLinea, val);
+    updateQueryParams(selectedLinea, val, showPrices, priceList);
+  };
+
+  const handlePricesToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setShowPrices(checked);
+    updateQueryParams(selectedLinea, search, checked, priceList);
+  };
+
+  const handlePriceListChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setPriceList(val);
+    updateQueryParams(selectedLinea, search, showPrices, val);
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -181,12 +197,16 @@ function CatalogoContent() {
     setLoading(false);
   }
 
+  // Genera URL pública incluyendo el estado exacto del checkbox "Ver Precios"
   const getPublicShareUrl = () => {
     const baseUrl = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
     params.set('mode', 'view');
     if (selectedLinea !== 'TODAS') params.set('linea', selectedLinea);
     if (search.trim() !== '') params.set('q', search);
+    if (!showPrices) params.set('prices', 'false');
+    if (priceList !== 'pvp1') params.set('list', priceList);
+    
     return `${baseUrl}?${params.toString()}`;
   };
 
@@ -313,7 +333,7 @@ function CatalogoContent() {
         }
       `}</style>
 
-      {/* ENCABEZADO PARA MODO CLIENTE (SOLO LECTURA DE QR) */}
+      {/* ENCABEZADO MODO CLIENTE (LECTURA DESDE CÓDIGO QR) */}
       {isPublicView && (
         <div className="no-print max-w-7xl mx-auto bg-white p-4 rounded-2xl shadow-sm border border-gray-200 mb-4 text-center">
           <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900">
@@ -327,7 +347,7 @@ function CatalogoContent() {
         </div>
       )}
 
-      {/* BARRA DE CONTROLES (SE OCULTA COMPLETAMENTE AL ESCANEAR EL QR) */}
+      {/* BARRA DE CONTROLES (SOLO VISIBLE PARA EL VENDEDOR AUTENTICADO) */}
       {!isPublicView && (
         <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
           
@@ -365,7 +385,7 @@ function CatalogoContent() {
 
             <select
               value={priceList}
-              onChange={(e) => setPriceList(e.target.value)}
+              onChange={handlePriceListChange}
               className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-blue-50 text-blue-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="pvp1">Lista PVP 1</option>
@@ -379,7 +399,7 @@ function CatalogoContent() {
               <input
                 type="checkbox"
                 checked={showPrices}
-                onChange={(e) => setShowPrices(e.target.checked)}
+                onChange={handlePricesToggle}
                 className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
               />
               Ver Precios
@@ -538,9 +558,11 @@ function CatalogoContent() {
             <h3 className="text-lg font-extrabold text-gray-900 mb-1">
               📷 Escanea el Código QR
             </h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Línea seleccionada: <span className="font-bold text-purple-600">{selectedLinea}</span>
-            </p>
+            
+            <div className="text-xs text-gray-500 mb-4 space-y-1">
+              <p>Línea seleccionada: <span className="font-bold text-purple-600">{selectedLinea}</span></p>
+              <p>Precios visibles: <span className={`font-bold ${showPrices ? 'text-green-600' : 'text-red-500'}`}>{showPrices ? 'SÍ' : 'NO'}</span></p>
+            </div>
 
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 inline-block mb-4">
               {qrUrl ? (
@@ -551,7 +573,7 @@ function CatalogoContent() {
             </div>
 
             <p className="text-xs text-gray-600 mb-4">
-              Al escanear este código se abrirá el catálogo en modo lectura directamente.
+              Al escanear este código se abrirá el catálogo en modo lectura respetando tu configuración de precios.
             </p>
 
             <button
