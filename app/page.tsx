@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useTransition } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { processAndUploadCatalog } from '@/app/actions/upload-catalog';
@@ -92,6 +92,7 @@ function CatalogoContent() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadMessage, setUploadMessage] = useState<string>('');
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     if (isPublicView) {
@@ -199,7 +200,7 @@ function CatalogoContent() {
     setLoading(false);
   }
 
-  const handleUploadCatalog = async () => {
+  const handleUploadCatalog = () => {
     if (!file) {
       setUploadMessage('⚠️ Por favor selecciona un archivo Excel (.xlsx, .xls) o .csv');
       return;
@@ -211,16 +212,18 @@ function CatalogoContent() {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await processAndUploadCatalog(formData);
+    startTransition(async () => {
+      const response = await processAndUploadCatalog(formData);
 
-    if (response.success) {
-      setUploadMessage(`✅ ¡Éxito! Se actualizaron ${response.count} productos.`);
-      setFile(null);
-      fetchProducts();
-    } else {
-      setUploadMessage(`❌ Error: ${response.error}`);
-    }
-    setIsUploading(false);
+      if (response.success) {
+        setUploadMessage(`✅ ¡Éxito! Se actualizaron ${response.count} productos.`);
+        setFile(null);
+        fetchProducts();
+      } else {
+        setUploadMessage(`❌ Error: ${response.error}`);
+      }
+      setIsUploading(false);
+    });
   };
 
   const getPublicShareUrl = () => {
