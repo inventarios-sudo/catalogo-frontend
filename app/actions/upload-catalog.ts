@@ -8,9 +8,9 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_P
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-export async function processAndUploadCatalog(formData: FormData) {
+export async function processAndUploadCatalog(formData: any): Promise<{ success: boolean; error?: string; count?: number }> {
   try {
-    const file = formData.get('file') as File;
+    const file = formData.get('file') as File | null;
     if (!file) {
       return { success: false, error: 'No se ha seleccionado ningún archivo.' };
     }
@@ -26,7 +26,7 @@ export async function processAndUploadCatalog(formData: FormData) {
       return { success: false, error: 'El archivo está vacío.' };
     }
 
-    const formattedProducts = jsonData.map((row) => ({
+    const formattedProducts = jsonData.map((row: any) => ({
       referencia: String(row.referencia || row.Referencia || row.REFERENCIA || '').trim(),
       descripcion: String(row.descripcion || row.Descripcion || row.DESCRIPCION || '').trim(),
       linea: String(row.linea || row.Linea || row.LINEA || '').trim(),
