@@ -73,7 +73,7 @@ function CatalogoContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [lineas, setLineas] = useState<string[]>([]);
   
-  // Leer parámetros iniciales de la URL si existen
+  // Leer parámetros iniciales de la URL
   const [selectedLinea, setSelectedLinea] = useState<string>(searchParams.get('linea') || 'TODAS');
   const [search, setSearch] = useState<string>(searchParams.get('q') || '');
   
@@ -83,6 +83,8 @@ function CatalogoContent() {
   const [errorMsg, setErrorMsg] = useState<string>('');
   
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showQRModal, setShowQRModal] = useState<boolean>(false);
+  const [qrUrl, setQrUrl] = useState<string>('');
 
   useEffect(() => {
     const logged = sessionStorage.getItem('catalogo_session_active');
@@ -94,13 +96,16 @@ function CatalogoContent() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPreviewImage(null);
+      if (e.key === 'Escape') {
+        setPreviewImage(null);
+        setShowQRModal(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Actualizar la URL dinámicamente cuando cambian los filtros
+  // Actualizar parámetros en la URL dinámicamente
   const updateQueryParams = (linea: string, query: string) => {
     const params = new URLSearchParams();
     if (linea && linea !== 'TODAS') params.set('linea', linea);
@@ -168,7 +173,7 @@ function CatalogoContent() {
     setLoading(false);
   }
 
-  // 🔍 BUSCADOR POR REFERENCIA Y DESCRIPCIÓN
+  // 🔍 BUSCADOR
   const filteredProducts = products.filter((p) => {
     const matchesLinea = selectedLinea === 'TODAS' || p.linea === selectedLinea;
     const term = search.toLowerCase().trim();
@@ -185,7 +190,7 @@ function CatalogoContent() {
     return product[priceList as keyof Product] ?? '0.00';
   };
 
-  // 📲 ENVIAR ENLACE DIRECTO POR WHATSAPP
+  // 📲 ENVIAR POR WHATSAPP
   const handleShareWhatsAppLink = () => {
     const currentUrl = window.location.href;
 
@@ -203,6 +208,15 @@ function CatalogoContent() {
 
     const urlWhatsApp = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
     window.open(urlWhatsApp, '_blank');
+  };
+
+  // 📷 GENERAR CÓDIGO QR
+  const handleGenerateQR = () => {
+    const currentUrl = window.location.href;
+    // Genera el QR usando la API gratuita de Google Charts API / QuickChart
+    const qrImageApi = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentUrl)}`;
+    setQrUrl(qrImageApi);
+    setShowQRModal(true);
   };
 
   const handlePrintPDF = () => {
@@ -346,16 +360,24 @@ function CatalogoContent() {
           <button
             onClick={handleShareWhatsAppLink}
             className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-            title="Compartir enlace filtrado a WhatsApp"
+            title="Enviar catálogo por WhatsApp"
           >
-            📲 Enviar Enlace por WhatsApp
+            📲 Enviar por WhatsApp
+          </button>
+
+          <button
+            onClick={handleGenerateQR}
+            className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+            title="Generar código QR"
+          >
+            📷 Generar QR
           </button>
 
           <button
             onClick={handlePrintPDF}
             className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
           >
-            📄 Generar PDF
+            📄 PDF
           </button>
 
           <button
@@ -464,6 +486,57 @@ function CatalogoContent() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* MODAL CÓDIGO QR */}
+      {showQRModal && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 no-print"
+          onClick={() => setShowQRModal(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowQRModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 font-bold text-xl w-8 h-8 rounded-full flex items-center justify-center bg-gray-100"
+            >
+              ✕
+            </button>
+
+            <h3 className="text-lg font-extrabold text-gray-900 mb-1">
+              📷 Escanea el Código QR
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Línea seleccionada: <span className="font-bold text-purple-600">{selectedLinea}</span>
+            </p>
+
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 inline-block mb-4">
+              {qrUrl ? (
+                <img src={qrUrl} alt="Código QR Catálogo" className="w-56 h-56 mx-auto rounded-lg shadow-sm" />
+              ) : (
+                <div className="w-56 h-56 flex items-center justify-center text-gray-400">Generando QR...</div>
+              )}
+            </div>
+
+            <p className="text-xs text-gray-600 mb-4">
+              Escanea este código con la cámara de tu celular para abrir este catálogo filtrado al instante.
+            </p>
+
+            <button
+              onClick={() => {
+                const a = document.createElement('a');
+                a.href = qrUrl;
+                a.download = `QR_Catalogo_${selectedLinea}.png`;
+                a.click();
+              }}
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-xl text-xs sm:text-sm shadow transition-all"
+            >
+              ⬇️ Descargar Imagen QR
+            </button>
+          </div>
         </div>
       )}
 
