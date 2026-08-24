@@ -23,17 +23,7 @@ const USUARIOS_PERMITIDOS: Record<string, string> = {
   'gabriela flores': 'gabriela.flores',
   'gabrielaflores': 'gabriela.flores',
   'madeleine vizcaino': 'madeleine.vizcaino',
-  'ernesto.punina': 'ernesto.punina',
-  'ronald.castro': 'ronald.castro',
-  'franklin.guaman': 'franklin.guaman',
-  'marina.flores': 'marina.flores',
-  'hector.morales': 'hector.morales',
-  'pablo.llumiquinga': 'pablo.llumiquinga',
-  'cristian.martinez': 'cristian.martinez',
-  'alexander.baquero': 'alexander.baquero',
-  'gabriela.flores': 'gabriela.flores',
-  'madeleine.vizcaino': 'madeleine.vizcaino',
-};
+  };
 
 interface Product {
   id: number;
