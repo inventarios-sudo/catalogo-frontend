@@ -76,12 +76,10 @@ function CatalogoContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [lineas, setLineas] = useState<string[]>([]);
   
-  // Leer parámetros de la URL (incluyendo visibilidad de precios y lista seleccionada)
+  // Leer parámetros de la URL
   const [selectedLinea, setSelectedLinea] = useState<string>(searchParams.get('linea') || 'TODAS');
   const [search, setSearch] = useState<string>(searchParams.get('q') || '');
   const [priceList, setPriceList] = useState<string>(searchParams.get('list') || 'pvp1');
-  
-  // Si en la URL viene 'prices=false', no muestra precios. Por defecto está activo (true).
   const [showPrices, setShowPrices] = useState<boolean>(searchParams.get('prices') !== 'false');
   
   const [loading, setLoading] = useState<boolean>(true);
@@ -197,7 +195,6 @@ function CatalogoContent() {
     setLoading(false);
   }
 
-  // Genera URL pública incluyendo el estado exacto del checkbox "Ver Precios"
   const getPublicShareUrl = () => {
     const baseUrl = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
@@ -208,25 +205,6 @@ function CatalogoContent() {
     if (priceList !== 'pvp1') params.set('list', priceList);
     
     return `${baseUrl}?${params.toString()}`;
-  };
-
-  const handleShareWhatsAppLink = () => {
-    const shareUrl = getPublicShareUrl();
-
-    let mensaje = `📋 *CATÁLOGO DIGITAL DE PRODUCTOS*\n`;
-    if (selectedLinea !== 'TODAS') {
-      mensaje += `Línea: *${selectedLinea}*\n`;
-    }
-    if (search.trim() !== '') {
-      mensaje += `Búsqueda: *${search}*\n`;
-    }
-    mensaje += `-----------------------------------\n\n`;
-    mensaje += `Haz clic en el siguiente enlace para ver el catálogo:\n\n`;
-    mensaje += `🔗 ${shareUrl}\n\n`;
-    mensaje += `_Consúltanos para realizar tu pedido._`;
-
-    const urlWhatsApp = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
-    window.open(urlWhatsApp, '_blank');
   };
 
   const handleGenerateQR = () => {
@@ -404,14 +382,6 @@ function CatalogoContent() {
               />
               Ver Precios
             </label>
-
-            <button
-              onClick={handleShareWhatsAppLink}
-              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-              title="Enviar catálogo por WhatsApp"
-            >
-              📲 Enviar por WhatsApp
-            </button>
 
             <button
               onClick={handleGenerateQR}
