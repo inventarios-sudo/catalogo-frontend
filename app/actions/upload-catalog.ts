@@ -10,6 +10,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 export async function processAndUploadCatalog(formData: FormData) {
   try {
+    const currentUser = (formData.get('user') as string || '').toLowerCase().trim();
+
+    // Validar de forma estricta que solo el usuario 'admin' ejecute esta acción
+    if (currentUser !== 'admin') {
+      return { 
+        success: false, 
+        error: '⛔ Acceso denegado: Solo la cuenta Administrador tiene permisos para realizar cargas masivas.' 
+      };
+    }
+
     const file = formData.get('file') as File;
     if (!file) {
       return { success: false, error: 'No se subió ningún archivo' };
@@ -18,7 +28,6 @@ export async function processAndUploadCatalog(formData: FormData) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Leer el archivo raw con detección de delimitadores (, o ;)
     const workbook = XLSX.read(buffer, { type: 'buffer', raw: true });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
@@ -32,7 +41,6 @@ export async function processAndUploadCatalog(formData: FormData) {
     const productsMap = new Map<string, any>();
 
     rawData.forEach((row) => {
-      // Función ultra flexible para detectar nombres de columnas en mayúsculas, minúsculas o con tildes
       const getVal = (possibleKeys: string[]) => {
         const rowKeys = Object.keys(row);
         for (const key of possibleKeys) {
@@ -72,7 +80,7 @@ export async function processAndUploadCatalog(formData: FormData) {
       if (referencia) {
         productsMap.set(referencia, {
           referencia,
-          descripcion: descripcion || referencia, // Si no encuentra descripción usa la referencia como respaldo
+          descripcion: descripcion || referencia,
           linea: linea || 'GENERAL',
           pvp1,
           pvp3,
@@ -94,7 +102,6 @@ export async function processAndUploadCatalog(formData: FormData) {
       };
     }
 
-    // Upsert a Supabase en bloques de 500
     const chunkSize = 500;
     for (let i = 0; i < productsToUpsert.length; i += chunkSize) {
       const chunk = productsToUpsert.slice(i, i + chunkSize);
