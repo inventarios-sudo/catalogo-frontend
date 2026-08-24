@@ -65,6 +65,9 @@ function CatalogoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // Detectar si la URL proviene de un QR/compartido libre
+  const isPublicView = searchParams.get('mode') === 'view';
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [usuarioInput, setUsuarioInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
@@ -73,7 +76,7 @@ function CatalogoContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [lineas, setLineas] = useState<string[]>([]);
   
-  // Leer parámetros iniciales de la URL
+  // Leer parámetros de la URL
   const [selectedLinea, setSelectedLinea] = useState<string>(searchParams.get('linea') || 'TODAS');
   const [search, setSearch] = useState<string>(searchParams.get('q') || '');
   
@@ -87,12 +90,18 @@ function CatalogoContent() {
   const [qrUrl, setQrUrl] = useState<string>('');
 
   useEffect(() => {
-    const logged = sessionStorage.getItem('catalogo_session_active');
-    if (logged === 'true') {
+    // Si la URL es pública (desde el QR), se carga el catálogo directamente
+    if (isPublicView) {
       setIsAuthenticated(true);
       fetchProducts();
+    } else {
+      const logged = sessionStorage.getItem('catalogo_session_active');
+      if (logged === 'true') {
+        setIsAuthenticated(true);
+        fetchProducts();
+      }
     }
-  }, []);
+  }, [isPublicView]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -105,9 +114,9 @@ function CatalogoContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Actualizar parámetros en la URL dinámicamente
   const updateQueryParams = (linea: string, query: string) => {
     const params = new URLSearchParams();
+    if (isPublicView) params.set('mode', 'view');
     if (linea && linea !== 'TODAS') params.set('linea', linea);
     if (query && query.trim() !== '') params.set('q', query);
     
@@ -173,6 +182,49 @@ function CatalogoContent() {
     setLoading(false);
   }
 
+  // Genera el enlace público dinámico sin exigir login
+  const getPublicShareUrl = () => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    params.set('mode', 'view'); // Fuerza el acceso directo
+    if (selectedLinea !== 'TODAS') params.set('linea', selectedLinea);
+    if (search.trim() !== '') params.set('q', search);
+    return `${baseUrl}?${params.toString()}`;
+  };
+
+  // 📲 ENVIAR POR WHATSAPP
+  const handleShareWhatsAppLink = () => {
+    const shareUrl = getPublicShareUrl();
+
+    let mensaje = `📋 *CATÁLOGO DIGITAL DE PRODUCTOS*\n`;
+    if (selectedLinea !== 'TODAS') {
+      mensaje += `Línea: *${selectedLinea}*\n`;
+    }
+    if (search.trim() !== '') {
+      mensaje += `Búsqueda: *${search}*\n`;
+    }
+    mensaje += `-----------------------------------\n\n`;
+    mensaje += `Haz clic en el siguiente enlace para ver el catálogo interactivo:\n\n`;
+    mensaje += `🔗 ${shareUrl}\n\n`;
+    mensaje += `_Consúltanos para realizar tu pedido._`;
+
+    const urlWhatsApp = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
+    window.open(urlWhatsApp, '_blank');
+  };
+
+  // 📷 GENERAR CÓDIGO QR DIRECTO
+  const handleGenerateQR = () => {
+    const shareUrl = getPublicShareUrl();
+    const qrImageApi = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}`;
+    setQrUrl(qrImageApi);
+    setShowQRModal(true);
+  };
+
+  const handlePrintPDF = () => {
+    document.title = 'CATÁLOGO DE PRODUCTOS';
+    window.print();
+  };
+
   // 🔍 BUSCADOR
   const filteredProducts = products.filter((p) => {
     const matchesLinea = selectedLinea === 'TODAS' || p.linea === selectedLinea;
@@ -188,40 +240,6 @@ function CatalogoContent() {
 
   const getSelectedPrice = (product: Product) => {
     return product[priceList as keyof Product] ?? '0.00';
-  };
-
-  // 📲 ENVIAR POR WHATSAPP
-  const handleShareWhatsAppLink = () => {
-    const currentUrl = window.location.href;
-
-    let mensaje = `📋 *CATÁLOGO DIGITAL DE PRODUCTOS*\n`;
-    if (selectedLinea !== 'TODAS') {
-      mensaje += `Línea: *${selectedLinea}*\n`;
-    }
-    if (search.trim() !== '') {
-      mensaje += `Búsqueda: *${search}*\n`;
-    }
-    mensaje += `-----------------------------------\n\n`;
-    mensaje += `Haz clic en el siguiente enlace para ver la selección de productos y sus fotos:\n\n`;
-    mensaje += `🔗 ${currentUrl}\n\n`;
-    mensaje += `_Consúltanos para realizar tu pedido._`;
-
-    const urlWhatsApp = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
-    window.open(urlWhatsApp, '_blank');
-  };
-
-  // 📷 GENERAR CÓDIGO QR
-  const handleGenerateQR = () => {
-    const currentUrl = window.location.href;
-    // Genera el QR usando la API gratuita de Google Charts API / QuickChart
-    const qrImageApi = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentUrl)}`;
-    setQrUrl(qrImageApi);
-    setShowQRModal(true);
-  };
-
-  const handlePrintPDF = () => {
-    document.title = 'CATÁLOGO DE PRODUCTOS';
-    window.print();
   };
 
   if (!isAuthenticated) {
@@ -368,7 +386,7 @@ function CatalogoContent() {
           <button
             onClick={handleGenerateQR}
             className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-            title="Generar código QR"
+            title="Generar código QR para escaneo directo"
           >
             📷 Generar QR
           </button>
@@ -380,12 +398,14 @@ function CatalogoContent() {
             📄 PDF
           </button>
 
-          <button
-            onClick={handleLogout}
-            className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-          >
-            🚪 Salir
-          </button>
+          {!isPublicView && (
+            <button
+              onClick={handleLogout}
+              className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+            >
+              🚪 Salir
+            </button>
+          )}
         </div>
       </div>
 
@@ -522,7 +542,7 @@ function CatalogoContent() {
             </div>
 
             <p className="text-xs text-gray-600 mb-4">
-              Escanea este código con la cámara de tu celular para abrir este catálogo filtrado al instante.
+              Al escanear este código se abrirá el catálogo directamente sin pedir contraseña.
             </p>
 
             <button
