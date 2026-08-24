@@ -23,7 +23,17 @@ const USUARIOS_PERMITIDOS: Record<string, string> = {
   'gabriela flores': 'gabriela.flores',
   'gabrielaflores': 'gabriela.flores',
   'madeleine vizcaino': 'madeleine.vizcaino',
-  };
+  'ernesto.punina': 'ernesto.punina',
+  'ronald.castro': 'ronald.castro',
+  'franklin.guaman': 'franklin.guaman',
+  'marina.flores': 'marina.flores',
+  'hector.morales': 'hector.morales',
+  'pablo.llumiquinga': 'pablo.llumiquinga',
+  'cristian.martinez': 'cristian.martinez',
+  'alexander.baquero': 'alexander.baquero',
+  'gabriela.flores': 'gabriela.flores',
+  'madeleine.vizcaino': 'madeleine.vizcaino',
+};
 
 interface Product {
   id: number;
@@ -58,6 +68,7 @@ function CatalogoContent() {
   const isPublicView = searchParams.get('mode') === 'view';
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<string>('');
   const [usuarioInput, setUsuarioInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
@@ -88,8 +99,10 @@ function CatalogoContent() {
       fetchProducts();
     } else {
       const logged = sessionStorage.getItem('catalogo_session_active');
+      const savedUser = sessionStorage.getItem('catalogo_user_name') || '';
       if (logged === 'true') {
         setIsAuthenticated(true);
+        setCurrentUser(savedUser);
         fetchProducts();
       }
     }
@@ -149,7 +162,9 @@ function CatalogoContent() {
 
     if (USUARIOS_PERMITIDOS[userClean] && USUARIOS_PERMITIDOS[userClean] === passClean) {
       sessionStorage.setItem('catalogo_session_active', 'true');
+      sessionStorage.setItem('catalogo_user_name', userClean);
       setIsAuthenticated(true);
+      setCurrentUser(userClean);
       setAuthError('');
       fetchProducts();
     } else {
@@ -159,7 +174,9 @@ function CatalogoContent() {
 
   const handleLogout = () => {
     sessionStorage.removeItem('catalogo_session_active');
+    sessionStorage.removeItem('catalogo_user_name');
     setIsAuthenticated(false);
+    setCurrentUser('');
     setUsuarioInput('');
     setPasswordInput('');
   };
@@ -189,6 +206,11 @@ function CatalogoContent() {
   }
 
   const handleUploadCatalog = () => {
+    if (currentUser !== 'admin') {
+      setUploadMessage('⛔ Solo la cuenta Administrador puede realizar cargas masivas.');
+      return;
+    }
+
     if (!file) {
       setUploadMessage('⚠️ Por favor selecciona un archivo Excel (.xlsx, .xls) o .csv');
       return;
@@ -199,6 +221,7 @@ function CatalogoContent() {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('user', currentUser);
 
     startTransition(async () => {
       const response = await processAndUploadCatalog(formData);
@@ -342,41 +365,43 @@ function CatalogoContent() {
         </div>
       )}
 
-      {/* PANEL DE CONTROL COMPLETO (SOLO SI NO ES VISTA PÚBLICA) */}
+      {/* PANEL DE CONTROL COMPLETO */}
       {!isPublicView && (
         <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col gap-4">
           
-          {/* PANEL DE ACTUALIZACIÓN MASIVA (AUTOMATIZACIÓN EXCEL) */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
-              ⚙️ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo
-            </h2>
+          {/* PANEL DE ACTUALIZACIÓN MASIVA (SOLO VISIBLE PARA EL USUARIO ADMIN) */}
+          {currentUser === 'admin' && (
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <h2 className="text-xs sm:text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                ⚙️ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo
+              </h2>
 
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <input
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="text-xs text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer w-full sm:w-auto"
-              />
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  className="text-xs text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer w-full sm:w-auto"
+                />
 
-              <button
-                onClick={handleUploadCatalog}
-                disabled={isUploading || !file}
-                className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all w-full sm:w-auto ${
-                  isUploading || !file ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow'
-                }`}
-              >
-                {isUploading ? '🚀 Actualizando...' : '🚀 Actualizar Catálogo'}
-              </button>
+                <button
+                  onClick={handleUploadCatalog}
+                  disabled={isUploading || !file}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all w-full sm:w-auto ${
+                    isUploading || !file ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow'
+                  }`}
+                >
+                  {isUploading ? '🚀 Actualizando...' : '🚀 Actualizar Catálogo'}
+                </button>
+              </div>
+
+              {uploadMessage && (
+                <p className="text-xs mt-2 font-medium text-slate-700">
+                  {uploadMessage}
+                </p>
+              )}
             </div>
-
-            {uploadMessage && (
-              <p className="text-xs mt-2 font-medium text-slate-700">
-                {uploadMessage}
-              </p>
-            )}
-          </div>
+          )}
 
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
             <div>
@@ -385,6 +410,11 @@ function CatalogoContent() {
               </h1>
               <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
                 Mostrando: <span className="font-bold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
+                {currentUser && (
+                  <span className="ml-2 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                    👤 {currentUser}
+                  </span>
+                )}
               </p>
             </div>
 
@@ -498,7 +528,6 @@ function CatalogoContent() {
                           src={cleanUrl}
                           alt={p.descripcion || 'Producto'}
                           onError={(e) => {
-                            // Si la URL falla al cargar en el navegador, muestra marco de sin imagen
                             (e.target as HTMLElement).style.display = 'none';
                             const parent = (e.target as HTMLElement).parentElement;
                             if (parent) {
