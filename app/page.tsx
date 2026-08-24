@@ -65,7 +65,7 @@ function CatalogoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Detectar si la URL proviene de un QR/compartido libre
+  // Detectar si el usuario ingresó por escaneo de QR
   const isPublicView = searchParams.get('mode') === 'view';
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -90,7 +90,6 @@ function CatalogoContent() {
   const [qrUrl, setQrUrl] = useState<string>('');
 
   useEffect(() => {
-    // Si la URL es pública (desde el QR), se carga el catálogo directamente
     if (isPublicView) {
       setIsAuthenticated(true);
       fetchProducts();
@@ -182,17 +181,15 @@ function CatalogoContent() {
     setLoading(false);
   }
 
-  // Genera el enlace público dinámico sin exigir login
   const getPublicShareUrl = () => {
     const baseUrl = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
-    params.set('mode', 'view'); // Fuerza el acceso directo
+    params.set('mode', 'view');
     if (selectedLinea !== 'TODAS') params.set('linea', selectedLinea);
     if (search.trim() !== '') params.set('q', search);
     return `${baseUrl}?${params.toString()}`;
   };
 
-  // 📲 ENVIAR POR WHATSAPP
   const handleShareWhatsAppLink = () => {
     const shareUrl = getPublicShareUrl();
 
@@ -204,7 +201,7 @@ function CatalogoContent() {
       mensaje += `Búsqueda: *${search}*\n`;
     }
     mensaje += `-----------------------------------\n\n`;
-    mensaje += `Haz clic en el siguiente enlace para ver el catálogo interactivo:\n\n`;
+    mensaje += `Haz clic en el siguiente enlace para ver el catálogo:\n\n`;
     mensaje += `🔗 ${shareUrl}\n\n`;
     mensaje += `_Consúltanos para realizar tu pedido._`;
 
@@ -212,7 +209,6 @@ function CatalogoContent() {
     window.open(urlWhatsApp, '_blank');
   };
 
-  // 📷 GENERAR CÓDIGO QR DIRECTO
   const handleGenerateQR = () => {
     const shareUrl = getPublicShareUrl();
     const qrImageApi = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}`;
@@ -225,7 +221,6 @@ function CatalogoContent() {
     window.print();
   };
 
-  // 🔍 BUSCADOR
   const filteredProducts = products.filter((p) => {
     const matchesLinea = selectedLinea === 'TODAS' || p.linea === selectedLinea;
     const term = search.toLowerCase().trim();
@@ -318,96 +313,110 @@ function CatalogoContent() {
         }
       `}</style>
 
-      {/* FILTROS Y CONTROLES */}
-      <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
-        
-        <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 flex items-center gap-2">
+      {/* ENCABEZADO PARA MODO CLIENTE (SOLO LECTURA DE QR) */}
+      {isPublicView && (
+        <div className="no-print max-w-7xl mx-auto bg-white p-4 rounded-2xl shadow-sm border border-gray-200 mb-4 text-center">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900">
             📦 Catálogo de Productos
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-            Mostrando: <span className="font-bold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
-          </p>
+          {selectedLinea !== 'TODAS' && (
+            <p className="text-xs sm:text-sm text-blue-600 font-bold mt-1">
+              Línea: {selectedLinea}
+            </p>
+          )}
         </div>
+      )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
+      {/* BARRA DE CONTROLES (SE OCULTA COMPLETAMENTE AL ESCANEAR EL QR) */}
+      {!isPublicView && (
+        <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
           
-          <input
-            type="text"
-            placeholder="Buscar por Ref o Nombre..."
-            value={search}
-            onChange={handleSearchChange}
-            className="w-full sm:w-auto border border-gray-300 bg-white text-gray-900 placeholder-gray-400 font-medium rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 flex items-center gap-2">
+              📦 Catálogo de Productos
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+              Mostrando: <span className="font-bold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
+            </p>
+          </div>
 
-          <select
-            value={selectedLinea}
-            onChange={handleLineaChange}
-            className="w-full sm:w-auto border border-gray-300 text-gray-900 font-medium rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="TODAS">Todas las Líneas ({lineas.length})</option>
-            {lineas.map((linea) => (
-              <option key={linea} value={linea}>
-                {linea}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={priceList}
-            onChange={(e) => setPriceList(e.target.value)}
-            className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-blue-50 text-blue-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="pvp1">Lista PVP 1</option>
-            <option value="pvp3">Lista PVP 3</option>
-            <option value="pvp4">Lista PVP 4</option>
-            <option value="pvp5">Lista PVP 5</option>
-            <option value="pvp6">Lista PVP 6</option>
-          </select>
-
-          <label className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 cursor-pointer select-none">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
+            
             <input
-              type="checkbox"
-              checked={showPrices}
-              onChange={(e) => setShowPrices(e.target.checked)}
-              className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+              type="text"
+              placeholder="Buscar por Ref o Nombre..."
+              value={search}
+              onChange={handleSearchChange}
+              className="w-full sm:w-auto border border-gray-300 bg-white text-gray-900 placeholder-gray-400 font-medium rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            Ver Precios
-          </label>
 
-          <button
-            onClick={handleShareWhatsAppLink}
-            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-            title="Enviar catálogo por WhatsApp"
-          >
-            📲 Enviar por WhatsApp
-          </button>
+            <select
+              value={selectedLinea}
+              onChange={handleLineaChange}
+              className="w-full sm:w-auto border border-gray-300 text-gray-900 font-medium rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="TODAS">Todas las Líneas ({lineas.length})</option>
+              {lineas.map((linea) => (
+                <option key={linea} value={linea}>
+                  {linea}
+                </option>
+              ))}
+            </select>
 
-          <button
-            onClick={handleGenerateQR}
-            className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
-            title="Generar código QR para escaneo directo"
-          >
-            📷 Generar QR
-          </button>
+            <select
+              value={priceList}
+              onChange={(e) => setPriceList(e.target.value)}
+              className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-blue-50 text-blue-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="pvp1">Lista PVP 1</option>
+              <option value="pvp3">Lista PVP 3</option>
+              <option value="pvp4">Lista PVP 4</option>
+              <option value="pvp5">Lista PVP 5</option>
+              <option value="pvp6">Lista PVP 6</option>
+            </select>
 
-          <button
-            onClick={handlePrintPDF}
-            className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
-          >
-            📄 PDF
-          </button>
+            <label className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showPrices}
+                onChange={(e) => setShowPrices(e.target.checked)}
+                className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+              />
+              Ver Precios
+            </label>
 
-          {!isPublicView && (
+            <button
+              onClick={handleShareWhatsAppLink}
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+              title="Enviar catálogo por WhatsApp"
+            >
+              📲 Enviar por WhatsApp
+            </button>
+
+            <button
+              onClick={handleGenerateQR}
+              className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+              title="Generar código QR"
+            >
+              📷 Generar QR
+            </button>
+
+            <button
+              onClick={handlePrintPDF}
+              className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
+            >
+              📄 PDF
+            </button>
+
             <button
               onClick={handleLogout}
               className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
             >
               🚪 Salir
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {errorMsg && (
         <div className="no-print max-w-7xl mx-auto mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs sm:text-sm font-medium">
@@ -542,7 +551,7 @@ function CatalogoContent() {
             </div>
 
             <p className="text-xs text-gray-600 mb-4">
-              Al escanear este código se abrirá el catálogo directamente sin pedir contraseña.
+              Al escanear este código se abrirá el catálogo en modo lectura directamente.
             </p>
 
             <button
