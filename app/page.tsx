@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { processAndUploadCatalog } from './actions/upload-catalog';
+import { processAndUploadCatalog } from '@/app/actions/upload-catalog';
 
 // Configuración de Supabase
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
