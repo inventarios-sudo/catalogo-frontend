@@ -12,7 +12,6 @@ export async function processAndUploadCatalog(formData: FormData) {
   try {
     const currentUser = (formData.get('user') as string || '').toLowerCase().trim();
 
-    // Validar de forma estricta que solo el usuario 'admin' ejecute esta acción
     if (currentUser !== 'admin') {
       return { 
         success: false, 
@@ -56,9 +55,25 @@ export async function processAndUploadCatalog(formData: FormData) {
         return null;
       };
 
-      const referencia = String(getVal(['referencia', 'ref', 'codigo', 'item', 'id', 'clave']) || '').trim();
-      const descripcion = String(getVal(['descripcion', 'nombre', 'producto', 'detalle', 'articulo']) || '').trim();
-      const linea = String(getVal(['linea', 'categoria', 'marca', 'grupo', 'familia']) || 'GENERAL').trim();
+      // Buscadores ampliados de nombres de columnas
+      const referencia = String(getVal(['referencia', 'ref', 'codigo', 'cod', 'item', 'id', 'clave']) || '').trim();
+      
+      const descripcion = String(
+        getVal([
+          'descripcion', 
+          'description', 
+          'descrip', 
+          'nombre', 
+          'nom_art', 
+          'articulo', 
+          'producto', 
+          'detalle', 
+          'concepto',
+          'nom_prod'
+        ]) || ''
+      ).trim();
+
+      const linea = String(getVal(['linea', 'categoria', 'marca', 'grupo', 'familia', 'proveedor']) || 'GENERAL').trim();
 
       const parseNum = (val: any) => {
         if (typeof val === 'number') return val;
@@ -98,7 +113,7 @@ export async function processAndUploadCatalog(formData: FormData) {
     if (productsToUpsert.length === 0) {
       return { 
         success: false, 
-        error: 'No se encontraron columnas de Referencia/Código en el archivo. Verifica los nombres de tus columnas.' 
+        error: 'No se encontraron columnas de Referencia en el archivo. Verifica los nombres de tus columnas.' 
       };
     }
 
