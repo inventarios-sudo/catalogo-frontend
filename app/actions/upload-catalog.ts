@@ -40,12 +40,13 @@ export async function processAndUploadCatalog(formData: FormData) {
     const productsMap = new Map<string, any>();
 
     rawData.forEach((row) => {
+      // Función simplificada y exacta para emparejar los encabezados de tu archivo
       const getVal = (possibleKeys: string[]) => {
         const rowKeys = Object.keys(row);
         for (const key of possibleKeys) {
           const foundKey = rowKeys.find((k) => {
-            const cleanK = k.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const cleanKey = key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const cleanK = k.trim().toLowerCase();
+            const cleanKey = key.trim().toLowerCase();
             return cleanK === cleanKey || cleanK.includes(cleanKey);
           });
           if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null) {
@@ -55,25 +56,14 @@ export async function processAndUploadCatalog(formData: FormData) {
         return null;
       };
 
-      // Buscadores ampliados de nombres de columnas
-      const referencia = String(getVal(['referencia', 'ref', 'codigo', 'cod', 'item', 'id', 'clave']) || '').trim();
+      const referencia = String(getVal(['referencia', 'ref', 'codigo', 'item']) || '').trim();
       
+      // Mapeo exacto para "Descripción" / "Descripcion"
       const descripcion = String(
-        getVal([
-          'descripcion', 
-          'description', 
-          'descrip', 
-          'nombre', 
-          'nom_art', 
-          'articulo', 
-          'producto', 
-          'detalle', 
-          'concepto',
-          'nom_prod'
-        ]) || ''
+        getVal(['descripción', 'descripcion', 'nombre', 'producto', 'articulo', 'detalle']) || ''
       ).trim();
 
-      const linea = String(getVal(['linea', 'categoria', 'marca', 'grupo', 'familia', 'proveedor']) || 'GENERAL').trim();
+      const linea = String(getVal(['linea', 'categoría', 'categoria', 'marca', 'grupo']) || 'GENERAL').trim();
 
       const parseNum = (val: any) => {
         if (typeof val === 'number') return val;
@@ -90,7 +80,12 @@ export async function processAndUploadCatalog(formData: FormData) {
       const pvp6 = parseNum(getVal(['pvp6', 'precio6', 'precio_6']));
       const existencia = Math.floor(parseNum(getVal(['existencia', 'stock', 'cantidad', 'inv', 'saldo'])));
       
-      const imagen_url = String(getVal(['imagen_url', 'imagen', 'url_imagen', 'foto', 'url', 'link']) || '').trim();
+      // Mapeo para la columna "Imagen" o "#N/A"
+      let rawImg = String(getVal(['imagen', 'imagen_url', 'foto', 'url', 'link']) || '').trim();
+      if (rawImg.includes('#N/A') || rawImg.includes('N/A')) {
+        rawImg = '';
+      }
+      const imagen_url = rawImg;
 
       if (referencia) {
         productsMap.set(referencia, {
@@ -113,7 +108,7 @@ export async function processAndUploadCatalog(formData: FormData) {
     if (productsToUpsert.length === 0) {
       return { 
         success: false, 
-        error: 'No se encontraron columnas de Referencia en el archivo. Verifica los nombres de tus columnas.' 
+        error: 'No se encontraron columnas válidas de Referencia en el archivo.' 
       };
     }
 
