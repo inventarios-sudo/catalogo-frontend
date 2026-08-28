@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { processAndUploadCatalog } from '@/app/actions/upload-catalog';
-import { QRCodeSVG } from 'qrcode.react';
 
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -128,7 +127,7 @@ function ProductImage({
 
 export default function CatalogoPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isQRView, setIsQRView] = useState(false); // Detecta si es escaneo de QR
+  const [isQRView, setIsQRView] = useState(false);
 
   const [currentUserRole, setCurrentUserRole] = useState('');
   const [currentUserName, setCurrentUserName] = useState('');
@@ -151,11 +150,10 @@ export default function CatalogoPage() {
   const [uploadStatus, setUploadStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Estado para el modal de código QR
+  // Estado para el modal del QR
   const [showQRModal, setShowQRModal] = useState(false);
-  const [generatedQRUrl, setGeneratedQRUrl] = useState('');
+  const [qrImageUrl, setQrImageUrl] = useState('');
 
-  // Cargar parámetros de la URL al iniciar (si se accede mediante escaneo de QR)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -278,7 +276,7 @@ export default function CatalogoPage() {
     }
   };
 
-  // Genera la URL limpia especificando mode=qr para ocultar paneles
+  // Generación directa de la imagen del QR vía API sin fallos de paquetes
   const handleGenerateQR = () => {
     const baseUrl = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
@@ -291,17 +289,17 @@ export default function CatalogoPage() {
     params.set('precios', showPrices ? '1' : '0');
 
     const finalUrl = `${baseUrl}?${params.toString()}`;
-    setGeneratedQRUrl(finalUrl);
+    const apiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(finalUrl)}`;
+
+    setQrImageUrl(apiQrUrl);
     setShowQRModal(true);
   };
 
-  // VISTA PARA CLIENTES / SCANNER DE QR (Sin Login y sin paneles de búsqueda/filtro)
+  // VISTA PÚBLICA / MODO QR PARA CLIENTES
   if (isQRView) {
     return (
       <div className="min-h-screen bg-[#f8fafc] p-4 md:p-6">
         <div className="max-w-7xl mx-auto space-y-4">
-          
-          {/* ENCABEZADO SIMPLIFICADO SÓLO MOSTRANDO LOGO Y LÍNEA */}
           <div className="bg-white rounded-2xl p-4 border border-gray-200/80 shadow-sm flex items-center justify-between">
             <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-10 md:h-12 object-contain" />
             <div className="text-right">
@@ -312,7 +310,6 @@ export default function CatalogoPage() {
             </div>
           </div>
 
-          {/* GRILLA DE PRODUCTOS LIMITADA A LA LÍNEA SELECCIONADA */}
           {loading ? (
             <div className="text-center py-20 text-gray-400 text-sm font-semibold">Cargando catálogo...</div>
           ) : (
@@ -374,7 +371,6 @@ export default function CatalogoPage() {
           )}
         </div>
 
-        {/* MODAL DE VISTA PREVIA DE IMAGEN PARA CLIENTES */}
         {previewImage && (
           <div
             className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4"
@@ -400,7 +396,7 @@ export default function CatalogoPage() {
     );
   }
 
-  // VISTA NORMAL DE LOGIN SI NO ESTÁ AUTENTICADO
+  // LOGIN SI NO ESTÁ AUTENTICADO
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
@@ -456,11 +452,10 @@ export default function CatalogoPage() {
     );
   }
 
-  // VISTA PANEL DEL VENDEDOR / ADMIN
+  // VISTA PANEL VENDEDOR / ADMIN CON BOTÓN DE QR VISIBLE
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6 print:bg-white print:p-0">
       
-      {/* ESTILOS DE IMPRESIÓN */}
       <style jsx global>{`
         @media print {
           @page {
@@ -502,7 +497,6 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* HEADER VISIBLE SÓLO EN IMPRESIÓN / PDF */}
       <div className="hidden print-header">
         <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-12 object-contain" />
         <div className="text-right">
@@ -513,7 +507,6 @@ export default function CatalogoPage() {
         </div>
       </div>
 
-      {/* FOOTER VISIBLE SÓLO EN IMPRESIÓN / PDF */}
       <div className="hidden print-footer">
         <p className="text-xs font-bold text-gray-700 tracking-wider uppercase">
           * PRECIOS NO INCLUYEN IVA *
@@ -522,7 +515,6 @@ export default function CatalogoPage() {
 
       <div className="max-w-7xl mx-auto space-y-4 print-content-padding">
 
-        {/* PANEL CONTROL */}
         <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-sm space-y-4 print:hidden">
           {currentUserRole === 'admin' && (
             <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-4">
@@ -612,10 +604,10 @@ export default function CatalogoPage() {
                 <span>Ver Precios</span>
               </label>
 
-              {/* BOTÓN DE GENERACIÓN DE QR */}
+              {/* BOTÓN GENERAR QR */}
               <button
                 onClick={handleGenerateQR}
-                className="bg-[#0284c7] hover:bg-sky-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors"
+                className="bg-[#0284c7] hover:bg-sky-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors flex items-center gap-1"
               >
                 📱 Generar QR
               </button>
@@ -697,7 +689,7 @@ export default function CatalogoPage() {
         )}
       </div>
 
-      {/* MODAL PARA MOSTRAR EL CÓDIGO QR GENERADO */}
+      {/* MODAL CÓDIGO QR */}
       {showQRModal && (
         <div
           className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
@@ -717,19 +709,19 @@ export default function CatalogoPage() {
             <div>
               <h3 className="text-lg font-bold text-gray-900">Código QR Generado</h3>
               <p className="text-xs text-gray-500 mt-1">
-                El cliente al escanear solo verá los productos de esta línea.
+                Al escanear, el cliente verá únicamente la línea y opción configurada.
               </p>
             </div>
 
             <div className="bg-gray-50 p-4 rounded-2xl flex items-center justify-center border border-gray-100">
-              <QRCodeSVG value={generatedQRUrl} size={200} level="H" includeMargin={true} />
+              <img src={qrImageUrl} alt="Código QR" className="w-48 h-48 rounded-lg" />
             </div>
 
             <div className="text-left bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 space-y-1">
               <div><strong>Línea:</strong> {selectedLine || 'Todas las Líneas'}</div>
-              <div><strong>Lista Aplicada:</strong> {priceList.toUpperCase()}</div>
+              <div><strong>Lista:</strong> {priceList.toUpperCase()}</div>
               <div>
-                <strong>Mostrar Precios:</strong>{' '}
+                <strong>Ver Precios:</strong>{' '}
                 <span className={showPrices ? 'text-green-700 font-bold' : 'text-red-600 font-bold'}>
                   {showPrices ? 'SÍ' : 'NO'}
                 </span>
@@ -746,7 +738,7 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* MODAL PARA VISTA PREVIA DE IMAGEN */}
+      {/* MODAL VISTA PREVIA IMAGEN */}
       {previewImage && (
         <div
           className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
