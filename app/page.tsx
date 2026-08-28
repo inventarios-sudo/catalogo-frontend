@@ -128,6 +128,8 @@ function ProductImage({
 
 export default function CatalogoPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isQRView, setIsQRView] = useState(false); // Detecta si es escaneo de QR
+
   const [currentUserRole, setCurrentUserRole] = useState('');
   const [currentUserName, setCurrentUserName] = useState('');
   const [usuarioInput, setUsuarioInput] = useState('');
@@ -157,16 +159,20 @@ export default function CatalogoPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const urlLine = params.get('linea');
-      const urlList = params.get('lista');
-      const urlPrices = params.get('precios');
+      const isPublic = params.get('mode') === 'qr';
 
-      if (urlLine) setSelectedLine(decodeURIComponent(urlLine));
-      if (urlList && ['pvp1', 'pvp3', 'pvp4', 'pvp5', 'pvp6'].includes(urlList)) {
-        setPriceList(urlList as any);
-      }
-      if (urlPrices !== null) {
+      if (isPublic) {
+        setIsQRView(true);
+        const urlLine = params.get('linea');
+        const urlList = params.get('lista');
+        const urlPrices = params.get('precios');
+
+        if (urlLine) setSelectedLine(decodeURIComponent(urlLine));
+        if (urlList && ['pvp1', 'pvp3', 'pvp4', 'pvp5', 'pvp6'].includes(urlList)) {
+          setPriceList(urlList as any);
+        }
         setShowPrices(urlPrices === '1' || urlPrices === 'true');
+        fetchProducts();
       }
     }
   }, []);
@@ -272,11 +278,12 @@ export default function CatalogoPage() {
     }
   };
 
-  // Función para construir la URL codificada e invocar el modal del QR
+  // Genera la URL limpia especificando mode=qr para ocultar paneles
   const handleGenerateQR = () => {
     const baseUrl = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
 
+    params.set('mode', 'qr');
     if (selectedLine) {
       params.set('linea', selectedLine);
     }
@@ -288,6 +295,112 @@ export default function CatalogoPage() {
     setShowQRModal(true);
   };
 
+  // VISTA PARA CLIENTES / SCANNER DE QR (Sin Login y sin paneles de búsqueda/filtro)
+  if (isQRView) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] p-4 md:p-6">
+        <div className="max-w-7xl mx-auto space-y-4">
+          
+          {/* ENCABEZADO SIMPLIFICADO SÓLO MOSTRANDO LOGO Y LÍNEA */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-200/80 shadow-sm flex items-center justify-between">
+            <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-10 md:h-12 object-contain" />
+            <div className="text-right">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">CATÁLOGO</span>
+              <h1 className="text-sm md:text-base font-extrabold text-blue-600 uppercase">
+                {selectedLine ? `LÍNEA: ${selectedLine}` : 'TODAS LAS LÍNEAS'}
+              </h1>
+            </div>
+          </div>
+
+          {/* GRILLA DE PRODUCTOS LIMITADA A LA LÍNEA SELECCIONADA */}
+          {loading ? (
+            <div className="text-center py-20 text-gray-400 text-sm font-semibold">Cargando catálogo...</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {filteredProducts.map((p) => {
+                const price = p[priceList] || 0;
+
+                return (
+                  <div
+                    key={p.referencia}
+                    className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm"
+                  >
+                    <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2">
+                      <ProductImage
+                        product={p}
+                        bucketName={bucketName}
+                        onImageClick={(url) => setPreviewImage(url)}
+                      />
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold text-blue-600 uppercase mb-0.5">
+                          {p.linea}
+                        </div>
+
+                        <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
+                          {p.descripcion}
+                        </h3>
+
+                        <div className="text-[11px] text-gray-500 mb-3">
+                          Ref: <span className="font-mono font-bold text-gray-800">{p.referencia}</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-100 flex items-end justify-between">
+                        <div>
+                          {showPrices ? (
+                            <div className="text-sm font-extrabold text-green-600">
+                              ${typeof price === 'number' ? price.toFixed(2) : price}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-gray-400 italic">Sin Precio</div>
+                          )}
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
+                          <div className="text-xs font-bold text-red-600">
+                            {p.existencia} und
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* MODAL DE VISTA PREVIA DE IMAGEN PARA CLIENTES */}
+        {previewImage && (
+          <div
+            className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4"
+            onClick={() => setPreviewImage(null)}
+          >
+            <div className="relative max-w-2xl w-full bg-white rounded-2xl p-2 shadow-2xl">
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="absolute top-3 right-3 bg-gray-900 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+              >
+                ✕
+              </button>
+              <img 
+                src={previewImage} 
+                alt="Vista previa" 
+                className="w-full h-auto max-h-[80vh] object-contain rounded-xl"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // VISTA NORMAL DE LOGIN SI NO ESTÁ AUTENTICADO
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
@@ -343,6 +456,7 @@ export default function CatalogoPage() {
     );
   }
 
+  // VISTA PANEL DEL VENDEDOR / ADMIN
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6 print:bg-white print:p-0">
       
@@ -601,9 +715,9 @@ export default function CatalogoPage() {
             </button>
 
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Código QR del Catálogo</h3>
+              <h3 className="text-lg font-bold text-gray-900">Código QR Generado</h3>
               <p className="text-xs text-gray-500 mt-1">
-                Escanea este código para ver el catálogo con la configuración actual.
+                El cliente al escanear solo verá los productos de esta línea.
               </p>
             </div>
 
@@ -613,11 +727,11 @@ export default function CatalogoPage() {
 
             <div className="text-left bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 space-y-1">
               <div><strong>Línea:</strong> {selectedLine || 'Todas las Líneas'}</div>
-              <div><strong>Lista Seleccionada:</strong> {priceList.toUpperCase()}</div>
+              <div><strong>Lista Aplicada:</strong> {priceList.toUpperCase()}</div>
               <div>
-                <strong>Precios Visibles:</strong>{' '}
+                <strong>Mostrar Precios:</strong>{' '}
                 <span className={showPrices ? 'text-green-700 font-bold' : 'text-red-600 font-bold'}>
-                  {showPrices ? 'SÍ (Con Precios)' : 'NO (Sin Precios)'}
+                  {showPrices ? 'SÍ' : 'NO'}
                 </span>
               </div>
             </div>
