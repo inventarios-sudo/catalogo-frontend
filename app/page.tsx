@@ -19,7 +19,7 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
-  [key: string]: any; // Para soportar cualquier nombre de columna dinámicamente
+  [key: string]: any;
 }
 
 const USERS_DATABASE: Record<string, { pass: string; role: string; name: string }> = {
@@ -37,11 +37,9 @@ const USERS_DATABASE: Record<string, { pass: string; role: string; name: string 
   'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'vendedor', name: 'Madeleine Vizcaino' },
 };
 
-// Extrae cualquier URL presente en el objeto del producto o convierte Google Drive a URL directa
 function resolveImageUrl(product: Product, bucketName: string): string[] {
   let foundUrl = '';
 
-  // 1. Buscar entre todos los valores del objeto del producto si alguno contiene "http"
   for (const key of Object.keys(product)) {
     const val = product[key];
     if (typeof val === 'string' && val.trim().startsWith('http')) {
@@ -50,7 +48,6 @@ function resolveImageUrl(product: Product, bucketName: string): string[] {
     }
   }
 
-  // 2. Si encontramos una URL de Google Drive, convertirla a sus formatos de imagen directos
   if (foundUrl.includes('drive.google.com') || foundUrl.includes('docs.google.com')) {
     const match = foundUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || foundUrl.match(/id=([a-zA-Z0-9_-]+)/);
     if (match && match[1]) {
@@ -63,12 +60,10 @@ function resolveImageUrl(product: Product, bucketName: string): string[] {
     }
   }
 
-  // 3. Si es una URL HTTP directa de otro servidor
   if (foundUrl) {
     return [foundUrl];
   }
 
-  // 4. Si no tiene URL guardada, fallback a Supabase Storage por referencia
   const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
   return [
     `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`,
@@ -312,19 +307,69 @@ export default function CatalogoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
+    <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6 print:bg-white print:p-0">
+      
+      {/* ESTILOS DE IMPRESIÓN PARA ENCABEZADO Y PIE DE PÁGINA REPETIDOS */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            margin: 15mm 10mm 15mm 10mm;
+          }
+          body {
+            background-color: #ffffff !important;
+          }
+          .print-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            display: flex !important;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid #e2e8f0;
+            background-color: white;
+            z-index: 1000;
+          }
+          .print-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            border-top: 1px solid #e2e8f0;
+            background-color: white;
+            z-index: 1000;
+          }
+          .print-content-padding {
+            padding-top: 70px;
+            padding-bottom: 40px;
+          }
+        }
+      `}</style>
 
-        {/* HEADER IMPRESIÓN */}
-        <div className="hidden print:flex items-center justify-between border-b-2 border-gray-300 pb-3 mb-4">
-          <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-16 object-contain" />
-          <div className="text-right">
-            <h2 className="text-xl font-bold text-gray-900">CATÁLOGO DE PRODUCTOS</h2>
-            <p className="text-xs text-gray-500">Lista: {priceList.toUpperCase()}</p>
-          </div>
+      {/* HEADER VISIBLE SÓLO EN IMPRESIÓN / PDF (REPETIDO EN CADA HOJA) */}
+      <div className="hidden print-header">
+        <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-12 object-contain" />
+        <div className="text-right">
+          <h2 className="text-base font-bold text-gray-900 tracking-tight">CATÁLOGO DE PRODUCTOS</h2>
+          <p className="text-[10px] text-gray-500 font-semibold uppercase">Lista: {priceList.toUpperCase()}</p>
         </div>
+      </div>
 
-        {/* PANEL CONTROL */}
+      {/* FOOTER VISIBLE SÓLO EN IMPRESIÓN / PDF (REPETIDO EN CADA HOJA) */}
+      <div className="hidden print-footer">
+        <p className="text-xs font-bold text-gray-700 tracking-wider uppercase">
+          * PRECIOS NO INCLUYEN IVA *
+        </p>
+      </div>
+
+      <div className="max-w-7xl mx-auto space-y-4 print-content-padding">
+
+        {/* PANEL CONTROL (SE OCULTA EN PDF/IMPRESIÓN) */}
         <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-sm space-y-4 print:hidden">
           {currentUserRole === 'admin' && (
             <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-4">
@@ -416,7 +461,7 @@ export default function CatalogoPage() {
 
               <button
                 onClick={() => window.print()}
-                className="bg-[#ef4444] text-white font-bold text-xs px-3.5 py-2 rounded-xl"
+                className="bg-[#ef4444] hover:bg-red-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors"
               >
                 🚩 PDF
               </button>
@@ -440,9 +485,9 @@ export default function CatalogoPage() {
               return (
                 <div
                   key={p.referencia}
-                  className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid"
+                  className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid print:shadow-none print:border-gray-300"
                 >
-                  <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2">
+                  <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2 print:bg-white">
                     <ProductImage
                       product={p}
                       bucketName={bucketName}
