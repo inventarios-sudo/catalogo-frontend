@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { processAndUploadCatalog } from '@/app/actions/upload-catalog';
+import { QRCodeSVG } from 'qrcode.react';
 
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -148,6 +149,28 @@ export default function CatalogoPage() {
   const [uploadStatus, setUploadStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  // Estado para el modal de código QR
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [generatedQRUrl, setGeneratedQRUrl] = useState('');
+
+  // Cargar parámetros de la URL al iniciar (si se accede mediante escaneo de QR)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlLine = params.get('linea');
+      const urlList = params.get('lista');
+      const urlPrices = params.get('precios');
+
+      if (urlLine) setSelectedLine(decodeURIComponent(urlLine));
+      if (urlList && ['pvp1', 'pvp3', 'pvp4', 'pvp5', 'pvp6'].includes(urlList)) {
+        setPriceList(urlList as any);
+      }
+      if (urlPrices !== null) {
+        setShowPrices(urlPrices === '1' || urlPrices === 'true');
+      }
+    }
+  }, []);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const u = usuarioInput.trim().toLowerCase();
@@ -158,8 +181,6 @@ export default function CatalogoPage() {
       setIsAuthenticated(true);
       setCurrentUserRole(matchedUser.role);
       setCurrentUserName(matchedUser.name);
-      setPriceList('pvp1');
-      setShowPrices(false);
       setLoginError('');
     } else {
       setLoginError('Usuario o contraseña incorrectos.');
@@ -251,6 +272,22 @@ export default function CatalogoPage() {
     }
   };
 
+  // Función para construir la URL codificada e invocar el modal del QR
+  const handleGenerateQR = () => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+
+    if (selectedLine) {
+      params.set('linea', selectedLine);
+    }
+    params.set('lista', priceList);
+    params.set('precios', showPrices ? '1' : '0');
+
+    const finalUrl = `${baseUrl}?${params.toString()}`;
+    setGeneratedQRUrl(finalUrl);
+    setShowQRModal(true);
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
@@ -309,7 +346,7 @@ export default function CatalogoPage() {
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6 print:bg-white print:p-0">
       
-      {/* ESTILOS DE IMPRESIÓN PARA ENCABEZADO Y PIE DE PÁGINA REPETIDOS */}
+      {/* ESTILOS DE IMPRESIÓN */}
       <style jsx global>{`
         @media print {
           @page {
@@ -351,16 +388,18 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* HEADER VISIBLE SÓLO EN IMPRESIÓN / PDF (REPETIDO EN CADA HOJA) */}
+      {/* HEADER VISIBLE SÓLO EN IMPRESIÓN / PDF */}
       <div className="hidden print-header">
         <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-12 object-contain" />
         <div className="text-right">
           <h2 className="text-base font-bold text-gray-900 tracking-tight">CATÁLOGO DE PRODUCTOS</h2>
-          <p className="text-[10px] text-gray-500 font-semibold uppercase">Lista: {priceList.toUpperCase()}</p>
+          <p className="text-[10px] text-gray-500 font-semibold uppercase">
+            Lista: {priceList.toUpperCase()} {selectedLine ? `| Línea: ${selectedLine}` : ''}
+          </p>
         </div>
       </div>
 
-      {/* FOOTER VISIBLE SÓLO EN IMPRESIÓN / PDF (REPETIDO EN CADA HOJA) */}
+      {/* FOOTER VISIBLE SÓLO EN IMPRESIÓN / PDF */}
       <div className="hidden print-footer">
         <p className="text-xs font-bold text-gray-700 tracking-wider uppercase">
           * PRECIOS NO INCLUYEN IVA *
@@ -369,7 +408,7 @@ export default function CatalogoPage() {
 
       <div className="max-w-7xl mx-auto space-y-4 print-content-padding">
 
-        {/* PANEL CONTROL (SE OCULTA EN PDF/IMPRESIÓN) */}
+        {/* PANEL CONTROL */}
         <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-sm space-y-4 print:hidden">
           {currentUserRole === 'admin' && (
             <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-4">
@@ -428,7 +467,7 @@ export default function CatalogoPage() {
               <select
                 value={selectedLine}
                 onChange={(e) => setSelectedLine(e.target.value)}
-                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs shadow-sm"
+                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs shadow-sm font-semibold"
               >
                 <option value="">Todas las Líneas ({lineas.length})</option>
                 {lineas.map((linea) => (
@@ -458,6 +497,14 @@ export default function CatalogoPage() {
                 />
                 <span>Ver Precios</span>
               </label>
+
+              {/* BOTÓN DE GENERACIÓN DE QR */}
+              <button
+                onClick={handleGenerateQR}
+                className="bg-[#0284c7] hover:bg-sky-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors"
+              >
+                📱 Generar QR
+              </button>
 
               <button
                 onClick={() => window.print()}
@@ -536,6 +583,56 @@ export default function CatalogoPage() {
         )}
       </div>
 
+      {/* MODAL PARA MOSTRAR EL CÓDIGO QR GENERADO */}
+      {showQRModal && (
+        <div
+          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
+          onClick={() => setShowQRModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl relative space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowQRModal(false)}
+              className="absolute top-4 right-4 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+            >
+              ✕
+            </button>
+
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Código QR del Catálogo</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Escanea este código para ver el catálogo con la configuración actual.
+              </p>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-2xl flex items-center justify-center border border-gray-100">
+              <QRCodeSVG value={generatedQRUrl} size={200} level="H" includeMargin={true} />
+            </div>
+
+            <div className="text-left bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 space-y-1">
+              <div><strong>Línea:</strong> {selectedLine || 'Todas las Líneas'}</div>
+              <div><strong>Lista Seleccionada:</strong> {priceList.toUpperCase()}</div>
+              <div>
+                <strong>Precios Visibles:</strong>{' '}
+                <span className={showPrices ? 'text-green-700 font-bold' : 'text-red-600 font-bold'}>
+                  {showPrices ? 'SÍ (Con Precios)' : 'NO (Sin Precios)'}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowQRModal(false)}
+              className="w-full bg-[#0284c7] hover:bg-sky-700 text-white font-bold py-2.5 rounded-xl text-xs"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA VISTA PREVIA DE IMAGEN */}
       {previewImage && (
         <div
           className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
