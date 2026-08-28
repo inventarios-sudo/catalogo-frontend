@@ -40,6 +40,67 @@ const USERS_DATABASE: Record<string, { pass: string; role: string; name: string 
   'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'vendedor', name: 'Madeleine Vizcaino' },
 };
 
+// Componente inteligente de imagen con fallback automático por referencia
+function ProductImage({ product, onImageClick }: { product: Product; onImageClick: (url: string) => void }) {
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    // 1. Obtener la URL principal guardada en la BD (si existe)
+    let initialUrl = (product.imagen_url || product.url_imagen || product.imagen || '').trim();
+
+    // Si viene solo un nombre de archivo local, construir la URL completa de Supabase
+    if (initialUrl && !initialUrl.startsWith('http')) {
+      initialUrl = `${SUPABASE_URL}/storage/v1/object/public/productos/${initialUrl}`;
+    }
+
+    // 2. Si no hay URL en la BD, intentar construirla directamente usando la referencia
+    if (!initialUrl && product.referencia) {
+      const cleanRef = product.referencia.trim().replace(/\//g, '_');
+      initialUrl = `${SUPABASE_URL}/storage/v1/object/public/productos/${cleanRef}.jpg`;
+    }
+
+    setImageSrc(initialUrl || null);
+    setHasError(false);
+    setAttempt(0);
+  }, [product]);
+
+  const handleError = () => {
+    // Intenta alternativas si falla la primera imagen (.png o buscar sin caracteres especiales)
+    if (attempt === 0 && product.referencia) {
+      const cleanRef = product.referencia.trim().replace(/\//g, '_');
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/productos/${cleanRef}.png`);
+      setAttempt(1);
+    } else if (attempt === 1 && product.referencia) {
+      const cleanRef = product.referencia.trim().split('/')[0];
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/productos/${cleanRef}.jpg`);
+      setAttempt(2);
+    } else {
+      setHasError(true);
+    }
+  };
+
+  if (hasError || !imageSrc) {
+    return (
+      <div className="text-center text-gray-300 flex flex-col items-center justify-center">
+        <span className="text-3xl">🖼️</span>
+        <p className="text-[10px] font-semibold text-gray-400 mt-1">Sin Imagen</p>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageSrc}
+      alt={product.descripcion || product.referencia}
+      onError={handleError}
+      onClick={() => onImageClick(imageSrc)}
+      className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
+    />
+  );
+}
+
 export default function CatalogoPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState('');
@@ -236,12 +297,12 @@ export default function CatalogoPage() {
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
         
-        {/* ENCABEZADO PDF: SOLO EL LOGO SIN TEXTO AZUL */}
+        {/* ENCABEZADO EXCLUSIVO IMPRESIÓN / PDF */}
         <div className="hidden print:flex items-center justify-between border-b-2 border-gray-300 pb-3 mb-4">
           <div className="flex items-center">
             <img 
               src="/logo-texcomercial.jpg" 
-              alt="Texcomercial Logo" 
+              alt="Texcomercial" 
               className="h-16 object-contain"
             />
           </div>
@@ -371,9 +432,6 @@ export default function CatalogoPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3">
             {filteredProducts.map((p) => {
               const price = p[priceList] || 0;
-              // Detección flexible del campo URL de la imagen en Supabase
-              const rawUrl = p.imagen_url || p.url_imagen || p.imagen || '';
-              const cleanUrl = rawUrl.trim();
 
               return (
                 <div
@@ -381,23 +439,7 @@ export default function CatalogoPage() {
                   className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow relative print:break-inside-avoid"
                 >
                   <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 relative flex items-center justify-center p-2">
-                    {cleanUrl ? (
-                      <img
-                        src={cleanUrl}
-                        alt=""
-                        className="w-full h-full object-contain cursor-pointer"
-                        onClick={() => setPreviewImage(cleanUrl)}
-                        onError={(e) => {
-                          // Si falla el enlace directo por HTTP, oculta el elemento roto
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="text-center text-gray-300">
-                        <span className="text-3xl">🖼️</span>
-                        <p className="text-[10px] font-semibold text-gray-400 mt-1">Sin Imagen</p>
-                      </div>
-                    )}
+                    <ProductImage product={p} onImageClick={(url) => setPreviewImage(url)} />
                   </div>
 
                   <div className="flex-1 flex flex-col justify-between">
@@ -446,6 +488,24 @@ export default function CatalogoPage() {
           * PRECIOS NO INCLUYEN IVA *
         </p>
       </footer>
+
+      {/* MODAL DE AMPLIAIÓN DE IMAGEN */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-2xl w-full bg-white rounded-2xl overflow-hidden p-2 shadow-2xl">
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-3 right-3 bg-gray-900 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm hover:bg-gray-700 z-10"
+            >
+              ✕
+            </button>
+            <img src={previewImage} alt="Vista previa" className="w-full h-auto max-h-[80vh] object-contain rounded-xl" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
