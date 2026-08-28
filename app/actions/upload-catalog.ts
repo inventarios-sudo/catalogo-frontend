@@ -84,7 +84,7 @@ export async function processAndUploadCatalog(formData: FormData) {
       }
       const imagen_url = rawImg;
 
-      // Lectura de la nueva columna de análisis de compras
+      // Lectura de la columna "ESTADO PARA ANALISIS DE COMPRAS"
       const estado_analisis = String(
         getVal([
           'estado para analisis de compras',
@@ -106,7 +106,7 @@ export async function processAndUploadCatalog(formData: FormData) {
           pvp6,
           existencia,
           imagen_url,
-          estado_analisis, // Guardamos la columna en Supabase
+          estado_analisis,
         });
       }
     });
