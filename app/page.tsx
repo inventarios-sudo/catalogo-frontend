@@ -103,7 +103,7 @@ export default function CatalogoPage() {
       }
     } catch (err: any) {
       setErrorMsg(`Excepción: ${err.message || 'Sin conexión al servidor'}`);
-    } flex {
+    } finally {
       setLoading(false);
     }
   }
@@ -171,11 +171,11 @@ export default function CatalogoPage() {
     window.print();
   };
 
-  /* PANTALLA DE LOGIN */
+  /* VISTA DE LOGIN (CAPTURA 1) */
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
-        <div className="max-w-sm w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
           <div className="bg-gradient-to-b from-[#2563eb] to-[#4f46e5] pt-10 pb-8 px-6 text-center relative">
             <div className="mx-auto w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-sm">
               <span className="text-2xl">🔒</span>
@@ -231,12 +231,12 @@ export default function CatalogoPage() {
     );
   }
 
-  /* PANTALLA PRINCIPAL DEL CATÁLOGO */
+  /* VISTA DEL CATÁLOGO (CAPTURA 2) */
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
         
-        {/* ENCABEZADO DE IMPRESIÓN (PDF) */}
+        {/* ENCABEZADO EXCLUSIVO PARA IMPRESIÓN / PDF */}
         <div className="hidden print:flex items-center justify-between border-b-2 border-gray-300 pb-3 mb-4">
           <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-14 object-contain" />
           <div className="text-right">
@@ -245,16 +245,14 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        {/* CABECERA WEB PRINCIPAL */}
+        {/* CONTENEDOR PRINCIPAL WEB */}
         <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-sm space-y-4 print:hidden">
           
-          {/* PANEL DE ADMINISTRADOR */}
+          {/* PANEL ADMINISTRACIÓN */}
           {currentUserRole === 'admin' && (
             <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-2 text-slate-700 text-xs font-bold">
-                  <span>⚙️ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo</span>
-                </div>
+              <div className="flex items-center space-x-2 text-slate-700 text-xs font-bold mb-2">
+                <span>⚙️ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo</span>
               </div>
               
               <form onSubmit={handleFileUpload} className="flex flex-wrap items-center gap-2">
@@ -268,7 +266,7 @@ export default function CatalogoPage() {
                   disabled={uploading}
                   className="bg-[#94a3b8] hover:bg-slate-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition"
                 >
-                  💸 {uploading ? 'Cargando...' : 'Actualizar Catálogo'}
+                  🔖 {uploading ? 'Cargando...' : 'Actualizar Catálogo'}
                 </button>
               </form>
 
@@ -280,10 +278,10 @@ export default function CatalogoPage() {
             </div>
           )}
 
-          {/* BARRA SUPERIOR CON LOGO Y FILTROS */}
+          {/* BARRA SUPERIOR DE LA CAPTURA 2 */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
-            <div className="flex items-center space-x-4">
-              <img src="/logo-texcomercial.jpg" alt="Logo Texcomercial" className="h-12 object-contain" />
+            <div className="flex items-center space-x-3">
+              <span className="text-3xl">📦</span>
               <div>
                 <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight leading-none">
                   Catálogo de Productos
@@ -297,7 +295,6 @@ export default function CatalogoPage() {
               </div>
             </div>
 
-            {/* BARRA DE CONTROLES */}
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
@@ -366,7 +363,7 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        {/* ESTADOS CARGANDO / ERROR */}
+        {/* CARGANDO / ERROR */}
         {loading && (
           <div className="text-center py-16">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
@@ -380,7 +377,7 @@ export default function CatalogoPage() {
           </div>
         )}
 
-        {/* GRILLA DE PRODUCTOS */}
+        {/* GRILLA DE TARJETAS */}
         {!loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3">
             {filteredProducts.map((p) => {
@@ -449,14 +446,14 @@ export default function CatalogoPage() {
         )}
       </div>
 
-      {/* PIE DE PÁGINA IMPRESIÓN (PDF) */}
+      {/* PIE DE PÁGINA IMPRESIÓN (PDF) CON LEYENDA IVA */}
       <footer className="hidden print:block fixed bottom-0 left-0 right-0 text-center py-2 bg-white border-t border-gray-200">
         <p className="text-[10px] font-bold text-gray-700 tracking-wider">
           * PRECIOS NO INCLUYEN IVA *
         </p>
       </footer>
 
-      {/* MODAL PREVIEW DE IMAGEN */}
+      {/* MODAL DE IMAGEN */}
       {previewImage && (
         <div
           className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
