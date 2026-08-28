@@ -251,7 +251,7 @@ export default function CatalogoPage() {
                 (e.target as HTMLElement).style.display = 'none';
               }}
             />
-            <span className="text-xl font-black text-blue-900 tracking-tight">TEXCOMERCIAL</span>
+            <span className="text-xl font-black text-blue-900 tracking-tight"></span>
           </div>
           <div className="text-right">
             <h2 className="text-xl font-bold text-gray-900">CATÁLOGO DE PRODUCTOS</h2>
