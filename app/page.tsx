@@ -60,6 +60,7 @@ export default function CatalogoPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,11 +168,14 @@ export default function CatalogoPage() {
     }
   };
 
+  const handleImageError = (ref: string) => {
+    setFailedImages((prev) => ({ ...prev, [ref]: true }));
+  };
+
   const handleDownloadPDF = () => {
     window.print();
   };
 
-  /* VISTA DE LOGIN (CAPTURA 1) */
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
@@ -231,24 +235,32 @@ export default function CatalogoPage() {
     );
   }
 
-  /* VISTA DEL CATÁLOGO (CAPTURA 2) */
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
         
-        {/* ENCABEZADO EXCLUSIVO PARA IMPRESIÓN / PDF */}
+        {/* ENCABEZADO PDF CON VERIFICACIÓN DE LOGO */}
         <div className="hidden print:flex items-center justify-between border-b-2 border-gray-300 pb-3 mb-4">
-          <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-14 object-contain" />
+          <div className="flex items-center gap-3">
+            <img 
+              src="/logo-texcomercial.jpg" 
+              alt="Texcomercial" 
+              className="h-16 object-contain"
+              onError={(e) => {
+                // Si la imagen local falla, mostrar texto estructurado alternativo en el PDF
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+            <span className="text-xl font-black text-blue-900 tracking-tight">TEXCOMERCIAL</span>
+          </div>
           <div className="text-right">
             <h2 className="text-xl font-bold text-gray-900">CATÁLOGO DE PRODUCTOS</h2>
             <p className="text-xs text-gray-500">Lista seleccionada: {priceList.toUpperCase()}</p>
           </div>
         </div>
 
-        {/* CONTENEDOR PRINCIPAL WEB */}
+        {/* PANEL WEB */}
         <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-sm space-y-4 print:hidden">
-          
-          {/* PANEL ADMINISTRACIÓN */}
           {currentUserRole === 'admin' && (
             <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-4">
               <div className="flex items-center space-x-2 text-slate-700 text-xs font-bold mb-2">
@@ -278,7 +290,6 @@ export default function CatalogoPage() {
             </div>
           )}
 
-          {/* BARRA SUPERIOR DE LA CAPTURA 2 */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
             <div className="flex items-center space-x-3">
               <span className="text-3xl">📦</span>
@@ -289,7 +300,7 @@ export default function CatalogoPage() {
                 <div className="text-xs text-gray-500 font-medium mt-1 flex items-center gap-2">
                   <span>Mostrando: <strong className="text-blue-600">{filteredProducts.length}</strong> de {products.length} productos</span>
                   <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[11px]">
-                    👤 {currentUserRole}
+                    👤 {currentUserName}
                   </span>
                 </div>
               </div>
@@ -363,26 +374,12 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        {/* CARGANDO / ERROR */}
-        {loading && (
-          <div className="text-center py-16">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
-            <p className="text-xs text-gray-500 mt-2 font-semibold">Cargando catálogo...</p>
-          </div>
-        )}
-
-        {errorMsg && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-xs">
-            {errorMsg}
-          </div>
-        )}
-
-        {/* GRILLA DE TARJETAS */}
+        {/* CONTENIDO Y TARJETAS */}
         {!loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3">
             {filteredProducts.map((p) => {
               const price = p[priceList] || 0;
-              const cleanUrl = p.imagen_url && p.imagen_url.trim() !== '' ? p.imagen_url : null;
+              const hasImage = p.imagen_url && p.imagen_url.trim() !== '' && !failedImages[p.referencia];
 
               return (
                 <div
@@ -390,17 +387,18 @@ export default function CatalogoPage() {
                   className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow relative print:break-inside-avoid"
                 >
                   <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 relative flex items-center justify-center p-2">
-                    {cleanUrl ? (
+                    {hasImage ? (
                       <img
-                        src={cleanUrl}
-                        alt={p.descripcion || p.referencia}
+                        src={p.imagen_url}
+                        alt=""
+                        onError={() => handleImageError(p.referencia)}
                         className="w-full h-full object-contain cursor-pointer"
-                        onClick={() => setPreviewImage(cleanUrl)}
+                        onClick={() => setPreviewImage(p.imagen_url)}
                       />
                     ) : (
                       <div className="text-center text-gray-300">
-                        <span className="text-2xl">🖼️</span>
-                        <p className="text-[10px] font-semibold mt-1">Sin Imagen</p>
+                        <span className="text-3xl">🖼️</span>
+                        <p className="text-[10px] font-semibold text-gray-400 mt-1">Sin Imagen</p>
                       </div>
                     )}
                   </div>
@@ -446,30 +444,11 @@ export default function CatalogoPage() {
         )}
       </div>
 
-      {/* PIE DE PÁGINA IMPRESIÓN (PDF) CON LEYENDA IVA */}
       <footer className="hidden print:block fixed bottom-0 left-0 right-0 text-center py-2 bg-white border-t border-gray-200">
         <p className="text-[10px] font-bold text-gray-700 tracking-wider">
           * PRECIOS NO INCLUYEN IVA *
         </p>
       </footer>
-
-      {/* MODAL DE IMAGEN */}
-      {previewImage && (
-        <div
-          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div className="relative max-w-2xl w-full bg-white rounded-2xl overflow-hidden p-2 shadow-2xl">
-            <button
-              onClick={() => setPreviewImage(null)}
-              className="absolute top-3 right-3 bg-gray-900 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm hover:bg-gray-700 z-10"
-            >
-              ✕
-            </button>
-            <img src={previewImage} alt="Vista previa" className="w-full h-auto max-h-[80vh] object-contain rounded-xl" />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
