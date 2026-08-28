@@ -39,6 +39,33 @@ const USERS_DATABASE: Record<string, { pass: string; role: string; name: string 
   'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'vendedor', name: 'Madeleine Vizcaino' },
 };
 
+// Función para transformar URLs de Google Drive a URLs de imagen directas
+function formatImageUrl(url: string | undefined, ref: string, bucketName: string): string {
+  if (!url) {
+    const cleanRef = (ref || '').trim().replace(/\//g, '_');
+    return `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`;
+  }
+
+  const trimmedUrl = url.trim();
+
+  // Si es un enlace de Google Drive
+  if (trimmedUrl.includes('drive.google.com') || trimmedUrl.includes('docs.google.com')) {
+    // Extraer ID usando Regex
+    const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || trimmedUrl.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      // Endpoint CDN rápido y directo de Google
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+
+  // Si es URL relativa o nombre de archivo de Supabase
+  if (!trimmedUrl.startsWith('http')) {
+    return `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${trimmedUrl}`;
+  }
+
+  return trimmedUrl;
+}
+
 function ProductImage({ 
   product, 
   bucketName, 
@@ -48,7 +75,7 @@ function ProductImage({
   bucketName: string;
   onImageClick: (url: string) => void;
 }) {
-  const rawDbUrl = (product.imagen_url || product.url_imagen || product.imagen || '').trim();
+  const rawDbUrl = product.imagen_url || product.url_imagen || product.imagen || '';
   const [imageSrc, setImageSrc] = useState<string>('');
   const [attempt, setAttempt] = useState<number>(0);
   const [hasError, setHasError] = useState<boolean>(false);
@@ -56,28 +83,26 @@ function ProductImage({
   useEffect(() => {
     setHasError(false);
     setAttempt(0);
-
-    if (rawDbUrl.startsWith('http')) {
-      setImageSrc(rawDbUrl);
-    } else if (rawDbUrl) {
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${rawDbUrl}`);
-    } else {
-      const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`);
-    }
+    const initialUrl = formatImageUrl(rawDbUrl, product.referencia, bucketName);
+    setImageSrc(initialUrl);
   }, [product, bucketName, rawDbUrl]);
 
   const handleError = () => {
-    const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
-    
-    if (attempt === 0) {
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.png`);
+    // Si la imagen de Google Drive (lh3.googleusercontent.com) falla, probar con la URL secundaria de exportación
+    if (imageSrc.includes('lh3.googleusercontent.com/d/')) {
+      const id = imageSrc.split('/d/')[1];
+      setImageSrc(`https://drive.google.com/uc?export=view&id=${id}`);
       setAttempt(1);
-    } else if (attempt === 1) {
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpeg`);
+      return;
+    }
+
+    // Probar formatos locales si todo lo demás falla
+    const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
+    if (attempt === 0 || attempt === 1) {
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.png`);
       setAttempt(2);
     } else if (attempt === 2) {
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.JPG`);
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpeg`);
       setAttempt(3);
     } else {
       setHasError(true);
@@ -89,9 +114,6 @@ function ProductImage({
       <div className="text-center p-2">
         <span className="text-2xl">🖼️</span>
         <p className="text-[10px] font-semibold text-gray-400 mt-1">Sin Imagen</p>
-        <p className="text-[8px] text-red-400 truncate max-w-[150px] mx-auto mt-0.5" title={imageSrc}>
-          404: {imageSrc.split('/').pop()}
-        </p>
       </div>
     );
   }
@@ -103,6 +125,7 @@ function ProductImage({
       onError={handleError}
       onClick={() => onImageClick(imageSrc)}
       className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
+      referrerPolicy="no-referrer"
     />
   );
 }
@@ -122,8 +145,7 @@ export default function CatalogoPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const [bucketName, setBucketName] = useState('productos');
-  const [showDebug, setShowDebug] = useState(false);
+  const [bucketName] = useState('productos');
 
   const [priceList, setPriceList] = useState<'pvp1' | 'pvp3' | 'pvp4' | 'pvp5' | 'pvp6'>('pvp1');
   const [showPrices, setShowPrices] = useState(false);
@@ -289,8 +311,6 @@ export default function CatalogoPage() {
     );
   }
 
-  const sampleProd = products[0];
-
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
@@ -302,39 +322,6 @@ export default function CatalogoPage() {
             <h2 className="text-xl font-bold text-gray-900">CATÁLOGO DE PRODUCTOS</h2>
             <p className="text-xs text-gray-500">Lista: {priceList.toUpperCase()}</p>
           </div>
-        </div>
-
-        {/* BARRA DE DEPURACIÓN DE IMÁGENES */}
-        <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs print:hidden">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-amber-800">🔍 Diagnóstico de Imágenes:</span>
-              <label className="text-amber-900 font-semibold">Bucket de Storage:</label>
-              <input
-                type="text"
-                value={bucketName}
-                onChange={(e) => setBucketName(e.target.value)}
-                className="px-2 py-1 bg-white border border-amber-400 rounded font-mono text-xs w-32"
-                placeholder="ej: productos"
-              />
-            </div>
-            <button
-              onClick={() => setShowDebug(!showDebug)}
-              className="text-amber-700 font-bold underline"
-            >
-              {showDebug ? 'Ocultar Datos BD' : 'Ver Datos BD de Muestra'}
-            </button>
-          </div>
-
-          {showDebug && sampleProd && (
-            <div className="mt-2 pt-2 border-t border-amber-200 text-[11px] font-mono text-amber-900 space-y-1">
-              <p><strong>Ejemplo Ref:</strong> {sampleProd.referencia}</p>
-              <p><strong>Campo `imagen_url`:</strong> {sampleProd.imagen_url || 'VACÍO'}</p>
-              <p><strong>Campo `url_imagen`:</strong> {sampleProd.url_imagen || 'VACÍO'}</p>
-              <p><strong>Campo `imagen`:</strong> {sampleProd.imagen || 'VACÍO'}</p>
-              <p><strong>URL generada esperada:</strong> {`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${sampleProd.referencia}.jpg`}</p>
-            </div>
-          )}
         </div>
 
         {/* PANEL CONTROL */}
@@ -387,16 +374,16 @@ export default function CatalogoPage() {
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
-                placeholder="Buscar..."
+                placeholder="Buscar por Ref o Nombre..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs w-48"
+                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs w-48 shadow-sm"
               />
 
               <select
                 value={selectedLine}
                 onChange={(e) => setSelectedLine(e.target.value)}
-                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs"
+                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs shadow-sm"
               >
                 <option value="">Todas las Líneas ({lineas.length})</option>
                 {lineas.map((linea) => (
@@ -516,7 +503,12 @@ export default function CatalogoPage() {
             >
               ✕
             </button>
-            <img src={previewImage} alt="Vista previa" className="w-full h-auto max-h-[80vh] object-contain rounded-xl" />
+            <img 
+              src={previewImage} 
+              alt="Vista previa" 
+              className="w-full h-auto max-h-[80vh] object-contain rounded-xl"
+              referrerPolicy="no-referrer"
+            />
           </div>
         </div>
       )}
