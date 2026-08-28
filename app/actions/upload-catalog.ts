@@ -40,7 +40,6 @@ export async function processAndUploadCatalog(formData: FormData) {
     const productsMap = new Map<string, any>();
 
     rawData.forEach((row) => {
-      // Función simplificada y exacta para emparejar los encabezados de tu archivo
       const getVal = (possibleKeys: string[]) => {
         const rowKeys = Object.keys(row);
         for (const key of possibleKeys) {
@@ -58,7 +57,6 @@ export async function processAndUploadCatalog(formData: FormData) {
 
       const referencia = String(getVal(['referencia', 'ref', 'codigo', 'item']) || '').trim();
       
-      // Mapeo exacto para "Descripción" / "Descripcion"
       const descripcion = String(
         getVal(['descripción', 'descripcion', 'nombre', 'producto', 'articulo', 'detalle']) || ''
       ).trim();
@@ -80,12 +78,21 @@ export async function processAndUploadCatalog(formData: FormData) {
       const pvp6 = parseNum(getVal(['pvp6', 'precio6', 'precio_6']));
       const existencia = Math.floor(parseNum(getVal(['existencia', 'stock', 'cantidad', 'inv', 'saldo'])));
       
-      // Mapeo para la columna "Imagen" o "#N/A"
       let rawImg = String(getVal(['imagen', 'imagen_url', 'foto', 'url', 'link']) || '').trim();
       if (rawImg.includes('#N/A') || rawImg.includes('N/A')) {
         rawImg = '';
       }
       const imagen_url = rawImg;
+
+      // Lectura de la nueva columna de análisis de compras
+      const estado_analisis = String(
+        getVal([
+          'estado para analisis de compras',
+          'analisis de compras',
+          'estado analisis',
+          'analisis_compras'
+        ]) || 'SI'
+      ).trim();
 
       if (referencia) {
         productsMap.set(referencia, {
@@ -99,6 +106,7 @@ export async function processAndUploadCatalog(formData: FormData) {
           pvp6,
           existencia,
           imagen_url,
+          estado_analisis, // Guardamos la columna en Supabase
         });
       }
     });
