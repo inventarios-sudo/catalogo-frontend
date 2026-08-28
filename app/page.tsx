@@ -23,9 +23,31 @@ interface Product {
   estado_analisis?: string;
 }
 
+// BASE DE DATOS DE USUARIOS AUTORIZADOS
+const USERS_DATABASE: Record<string, { pass: string; role: string; name: string }> = {
+  // Administrador y accesos generales
+  'admin': { pass: 'admin123', role: 'admin', name: 'Administrador' },
+  'vendedor': { pass: 'vend123', role: 'vendedor', name: 'Vendedor General' },
+  'cliente': { pass: 'cli123', role: 'cliente', name: 'Cliente' },
+
+  // Vendedores Individuales
+  'ernesto punina': { pass: 'ernesto.punina', role: 'vendedor', name: 'Ernesto Punina' },
+  'ronald castro': { pass: 'ronald.castro', role: 'vendedor', name: 'Ronald Castro' },
+  'franklin guaman': { pass: 'franklin.guaman', role: 'vendedor', name: 'Franklin Guaman' },
+  'marina flores': { pass: 'marina.flores', role: 'vendedor', name: 'Marina Flores' },
+  'hector morales': { pass: 'hector.morales', role: 'vendedor', name: 'Hector Morales' },
+  'pablo llumiquinga': { pass: 'pablo.llumiquinga', role: 'vendedor', name: 'Pablo Llumiquinga' },
+  'cristian martinez': { pass: 'cristian.martinez', role: 'vendedor', name: 'Cristian Martinez' },
+  'alexander baquero': { pass: 'alexander.baquero', role: 'vendedor', name: 'Alexander Baquero' },
+  'gabriela flores': { pass: 'gabriela.flores', role: 'vendedor', name: 'Gabriela Flores' },
+  'gabrielaflores': { pass: 'gabriela.flores', role: 'vendedor', name: 'Gabriela Flores' },
+  'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'vendedor', name: 'Madeleine Vizcaino' },
+};
+
 export default function CatalogoPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState('');
+  const [currentUserRole, setCurrentUserRole] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('');
   const [usuarioInput, setUsuarioInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -42,34 +64,25 @@ export default function CatalogoPage() {
   const [priceList, setPriceList] = useState<'pvp1' | 'pvp3' | 'pvp4' | 'pvp5' | 'pvp6'>('pvp1');
   const [showPrices, setShowPrices] = useState(true);
 
-  // Estados para Carga de Archivos
+  // Carga de Archivos
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ success?: boolean; message?: string } | null>(null);
 
   // Preview de Imagen
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Manejo de Login
+  // Manejo del inicio de sesión
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const u = usuarioInput.trim().toLowerCase();
     const p = passwordInput.trim();
 
-    if (u === 'admin' && p === 'admin123') {
+    const matchedUser = USERS_DATABASE[u];
+
+    if (matchedUser && matchedUser.pass === p) {
       setIsAuthenticated(true);
-      setCurrentUser('admin');
-      setPriceList('pvp1');
-      setShowPrices(true);
-      setLoginError('');
-    } else if (u === 'vendedor' && p === 'vend123') {
-      setIsAuthenticated(true);
-      setCurrentUser('vendedor');
-      setPriceList('pvp1');
-      setShowPrices(true);
-      setLoginError('');
-    } else if (u === 'cliente' && p === 'cli123') {
-      setIsAuthenticated(true);
-      setCurrentUser('cliente');
+      setCurrentUserRole(matchedUser.role);
+      setCurrentUserName(matchedUser.name);
       setPriceList('pvp1');
       setShowPrices(true);
       setLoginError('');
@@ -80,12 +93,13 @@ export default function CatalogoPage() {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    setCurrentUser('');
+    setCurrentUserRole('');
+    setCurrentUserName('');
     setUsuarioInput('');
     setPasswordInput('');
   };
 
-  // Carga de Productos desde Supabase
+  // Cargar productos desde Supabase
   async function fetchProducts() {
     setLoading(true);
     setErrorMsg('');
@@ -116,22 +130,19 @@ export default function CatalogoPage() {
     }
   }, [isAuthenticated]);
 
-  // FILTRADO DINÁMICO DEL CATÁLOGO
+  // FILTRADO DINÁMICO SEGÚN LA REGLA DE EXISTENCIAS Y BÚSQUEDAS
   useEffect(() => {
     let result = products;
 
-    // 1. Regla de existencia: Solo se muestran productos con existencia > 0
-    result = result.filter((p) => {
-      const stock = Number(p.existencia || 0);
-      return stock > 0;
-    });
+    // Regla: Ocultar si la existencia es 0 (solo mostrar si stock > 0)
+    result = result.filter((p) => Number(p.existencia || 0) > 0);
 
-    // 2. Filtro por Línea / Categoría
+    // Filtro por Línea
     if (selectedLine) {
       result = result.filter((p) => p.linea === selectedLine);
     }
 
-    // 3. Filtro por Búsqueda (Texto por Referencia o Descripción)
+    // Filtro por Búsqueda (Referencia o Descripción)
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
       result = result.filter(
@@ -144,10 +155,10 @@ export default function CatalogoPage() {
     setFilteredProducts(result);
   }, [searchTerm, selectedLine, products]);
 
-  // Carga masiva (Server Action)
+  // Carga masiva desde Excel/CSV (Server Action)
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (currentUser !== 'admin') {
+    if (currentUserRole !== 'admin') {
       alert('Solo el usuario Administrador puede realizar cargas masivas.');
       return;
     }
@@ -165,7 +176,7 @@ export default function CatalogoPage() {
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
-    formData.append('user', currentUser);
+    formData.append('user', currentUserRole);
 
     const res = await processAndUploadCatalog(formData);
 
@@ -180,7 +191,7 @@ export default function CatalogoPage() {
     }
   };
 
-  // Retornar Pantalla de Login si no está autenticado
+  // FORMULARIO DE LOGIN
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -197,7 +208,7 @@ export default function CatalogoPage() {
                 type="text"
                 value={usuarioInput}
                 onChange={(e) => setUsuarioInput(e.target.value)}
-                placeholder="Ej. admin, vendedor, cliente"
+                placeholder="Ej. Ernesto Punina o admin"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                 required
               />
@@ -240,13 +251,12 @@ export default function CatalogoPage() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
             <h1 className="text-xl font-bold text-gray-900 tracking-tight">Catálogo Digital</h1>
-            <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize">
-              {currentUser}
+            <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+              👤 {currentUserName} ({currentUserRole})
             </span>
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* Selector de Lista de Precios */}
             <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg border border-gray-200 text-xs">
               <span className="font-semibold text-gray-600 px-2">Lista:</span>
               <select
@@ -280,8 +290,8 @@ export default function CatalogoPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* PANEL ADMINISTRADOR: CARGA MASIVA */}
-        {currentUser === 'admin' && (
+        {/* PANEL ADMINISTRADOR: ACTUALIZAR EXCEL */}
+        {currentUserRole === 'admin' && (
           <div className="bg-white border border-blue-200 rounded-xl p-4 mb-6 shadow-sm">
             <h2 className="text-sm font-bold text-blue-900 mb-2 flex items-center gap-2">
               <span>🚀 Carga Masiva de Productos (Excel / CSV)</span>
@@ -315,7 +325,7 @@ export default function CatalogoPage() {
           </div>
         )}
 
-        {/* CONTROLES DE BÚSQUEDA Y FILTRADO */}
+        {/* BUSCADOR Y SELECCIÓN DE LÍNEA */}
         <div className="flex flex-col md:flex-row gap-4 mb-6">
           <div className="flex-1">
             <input
@@ -343,7 +353,7 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        {/* MENSAJES DE ESTADO */}
+        {/* ESTADOS */}
         {loading && (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
@@ -357,7 +367,7 @@ export default function CatalogoPage() {
           </div>
         )}
 
-        {/* GRILLA DE PRODUCTOS */}
+        {/* TARJETAS DEL CATÁLOGO */}
         {!loading && filteredProducts.length === 0 && (
           <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
             <p className="text-gray-500 text-sm font-medium">No se encontraron productos disponibles con existencias.</p>
@@ -374,7 +384,7 @@ export default function CatalogoPage() {
                 key={p.referencia}
                 className="bg-white border border-gray-200 rounded-xl p-3 flex flex-col justify-between hover:shadow-md transition-shadow relative"
               >
-                {/* Imagen del Producto */}
+                {/* Imagen */}
                 <div className="w-full h-36 bg-gray-50 rounded-lg overflow-hidden mb-2 relative flex items-center justify-center border border-gray-100">
                   {cleanUrl ? (
                     <img
@@ -391,15 +401,15 @@ export default function CatalogoPage() {
                   </span>
                 </div>
 
-                {/* Detalles del Producto */}
+                {/* Info de Producto */}
                 <div className="flex-1 flex flex-col justify-between">
                   <div>
-                    {/* Línea/Categoría */}
+                    {/* Línea */}
                     <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-0.5">
                       {p.linea}
                     </div>
 
-                    {/* Descripción del Producto */}
+                    {/* Descripción del producto */}
                     <h3
                       onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
                       className={`text-[11px] sm:text-xs font-bold text-gray-900 line-clamp-2 leading-tight uppercase mb-1 ${
@@ -415,7 +425,7 @@ export default function CatalogoPage() {
                     </div>
                   </div>
 
-                  {/* Sección de Precios */}
+                  {/* Precios */}
                   <div className="border-t border-gray-100 pt-1.5 sm:pt-2 flex items-center justify-between mt-auto">
                     {showPrices ? (
                       <div>
@@ -437,7 +447,7 @@ export default function CatalogoPage() {
         </div>
       </main>
 
-      {/* MODAL DE PREVIEW DE IMAGEN */}
+      {/* MODAL DE IMAGEN */}
       {previewImage && (
         <div
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
