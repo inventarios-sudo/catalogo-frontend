@@ -22,7 +22,6 @@ interface Product {
   imagen_url?: string;
   url_imagen?: string;
   imagen?: string;
-  estado_analisis?: string;
 }
 
 const USERS_DATABASE: Record<string, { pass: string; role: string; name: string }> = {
@@ -40,52 +39,59 @@ const USERS_DATABASE: Record<string, { pass: string; role: string; name: string 
   'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'vendedor', name: 'Madeleine Vizcaino' },
 };
 
-// Componente inteligente de imagen con fallback automático por referencia
-function ProductImage({ product, onImageClick }: { product: Product; onImageClick: (url: string) => void }) {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [hasError, setHasError] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+function ProductImage({ 
+  product, 
+  bucketName, 
+  onImageClick 
+}: { 
+  product: Product; 
+  bucketName: string;
+  onImageClick: (url: string) => void;
+}) {
+  const rawDbUrl = (product.imagen_url || product.url_imagen || product.imagen || '').trim();
+  const [imageSrc, setImageSrc] = useState<string>('');
+  const [attempt, setAttempt] = useState<number>(0);
+  const [hasError, setHasError] = useState<boolean>(false);
 
   useEffect(() => {
-    // 1. Obtener la URL principal guardada en la BD (si existe)
-    let initialUrl = (product.imagen_url || product.url_imagen || product.imagen || '').trim();
-
-    // Si viene solo un nombre de archivo local, construir la URL completa de Supabase
-    if (initialUrl && !initialUrl.startsWith('http')) {
-      initialUrl = `${SUPABASE_URL}/storage/v1/object/public/productos/${initialUrl}`;
-    }
-
-    // 2. Si no hay URL en la BD, intentar construirla directamente usando la referencia
-    if (!initialUrl && product.referencia) {
-      const cleanRef = product.referencia.trim().replace(/\//g, '_');
-      initialUrl = `${SUPABASE_URL}/storage/v1/object/public/productos/${cleanRef}.jpg`;
-    }
-
-    setImageSrc(initialUrl || null);
     setHasError(false);
     setAttempt(0);
-  }, [product]);
+
+    if (rawDbUrl.startsWith('http')) {
+      setImageSrc(rawDbUrl);
+    } else if (rawDbUrl) {
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${rawDbUrl}`);
+    } else {
+      const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`);
+    }
+  }, [product, bucketName, rawDbUrl]);
 
   const handleError = () => {
-    // Intenta alternativas si falla la primera imagen (.png o buscar sin caracteres especiales)
-    if (attempt === 0 && product.referencia) {
-      const cleanRef = product.referencia.trim().replace(/\//g, '_');
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/productos/${cleanRef}.png`);
+    const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
+    
+    if (attempt === 0) {
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.png`);
       setAttempt(1);
-    } else if (attempt === 1 && product.referencia) {
-      const cleanRef = product.referencia.trim().split('/')[0];
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/productos/${cleanRef}.jpg`);
+    } else if (attempt === 1) {
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpeg`);
       setAttempt(2);
+    } else if (attempt === 2) {
+      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.JPG`);
+      setAttempt(3);
     } else {
       setHasError(true);
     }
   };
 
-  if (hasError || !imageSrc) {
+  if (hasError) {
     return (
-      <div className="text-center text-gray-300 flex flex-col items-center justify-center">
-        <span className="text-3xl">🖼️</span>
+      <div className="text-center p-2">
+        <span className="text-2xl">🖼️</span>
         <p className="text-[10px] font-semibold text-gray-400 mt-1">Sin Imagen</p>
+        <p className="text-[8px] text-red-400 truncate max-w-[150px] mx-auto mt-0.5" title={imageSrc}>
+          404: {imageSrc.split('/').pop()}
+        </p>
       </div>
     );
   }
@@ -115,11 +121,12 @@ export default function CatalogoPage() {
   const [selectedLine, setSelectedLine] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
+
+  const [bucketName, setBucketName] = useState('productos');
+  const [showDebug, setShowDebug] = useState(false);
 
   const [priceList, setPriceList] = useState<'pvp1' | 'pvp3' | 'pvp4' | 'pvp5' | 'pvp6'>('pvp1');
   const [showPrices, setShowPrices] = useState(false);
-
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -152,20 +159,17 @@ export default function CatalogoPage() {
 
   async function fetchProducts() {
     setLoading(true);
-    setErrorMsg('');
 
     try {
       const { data, error } = await supabase.from('products').select('*').range(0, 2999);
 
-      if (error) {
-        setErrorMsg(`Error [${error.code}]: ${error.message}`);
-      } else if (data) {
+      if (!error && data) {
         setProducts(data as Product[]);
         const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean) as string[];
         setLineas(uniqueLineas);
       }
-    } catch (err: any) {
-      setErrorMsg(`Excepción: ${err.message || 'Sin conexión al servidor'}`);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -230,46 +234,38 @@ export default function CatalogoPage() {
     }
   };
 
-  const handleDownloadPDF = () => {
-    window.print();
-  };
-
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-b from-[#2563eb] to-[#4f46e5] pt-10 pb-8 px-6 text-center relative">
-            <div className="mx-auto w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-sm">
+          <div className="bg-gradient-to-b from-[#2563eb] to-[#4f46e5] pt-10 pb-8 px-6 text-center">
+            <div className="mx-auto w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
               <span className="text-2xl">🔒</span>
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Acceso al Catálogo</h1>
-            <p className="text-xs text-blue-100 mt-1">Ingresa tus credenciales autorizadas para continuar</p>
+            <p className="text-xs text-blue-100 mt-1">Ingresa tus credenciales autorizadas</p>
           </div>
 
           <div className="p-8">
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
-                <label className="block text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1.5">
-                  USUARIO
-                </label>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">USUARIO</label>
                 <input
                   type="text"
                   value={usuarioInput}
                   onChange={(e) => setUsuarioInput(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 bg-gray-50/50"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1.5">
-                  CONTRASEÑA
-                </label>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">CONTRASEÑA</label>
                 <input
                   type="password"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 bg-gray-50/50"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
                   required
                 />
               </div>
@@ -282,7 +278,7 @@ export default function CatalogoPage() {
 
               <button
                 type="submit"
-                className="w-full bg-[#1d63ed] hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl text-sm transition-all duration-200 shadow-md hover:shadow-lg mt-2"
+                className="w-full bg-[#1d63ed] hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl text-sm shadow-md"
               >
                 Iniciar Sesión
               </button>
@@ -293,51 +289,80 @@ export default function CatalogoPage() {
     );
   }
 
+  const sampleProd = products[0];
+
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
-        
-        {/* ENCABEZADO EXCLUSIVO IMPRESIÓN / PDF */}
+
+        {/* HEADER IMPRESIÓN */}
         <div className="hidden print:flex items-center justify-between border-b-2 border-gray-300 pb-3 mb-4">
-          <div className="flex items-center">
-            <img 
-              src="/logo-texcomercial.jpg" 
-              alt="Texcomercial" 
-              className="h-16 object-contain"
-            />
-          </div>
+          <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-16 object-contain" />
           <div className="text-right">
             <h2 className="text-xl font-bold text-gray-900">CATÁLOGO DE PRODUCTOS</h2>
-            <p className="text-xs text-gray-500">Lista seleccionada: {priceList.toUpperCase()}</p>
+            <p className="text-xs text-gray-500">Lista: {priceList.toUpperCase()}</p>
           </div>
         </div>
 
-        {/* PANEL WEB */}
+        {/* BARRA DE DEPURACIÓN DE IMÁGENES */}
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs print:hidden">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-amber-800">🔍 Diagnóstico de Imágenes:</span>
+              <label className="text-amber-900 font-semibold">Bucket de Storage:</label>
+              <input
+                type="text"
+                value={bucketName}
+                onChange={(e) => setBucketName(e.target.value)}
+                className="px-2 py-1 bg-white border border-amber-400 rounded font-mono text-xs w-32"
+                placeholder="ej: productos"
+              />
+            </div>
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className="text-amber-700 font-bold underline"
+            >
+              {showDebug ? 'Ocultar Datos BD' : 'Ver Datos BD de Muestra'}
+            </button>
+          </div>
+
+          {showDebug && sampleProd && (
+            <div className="mt-2 pt-2 border-t border-amber-200 text-[11px] font-mono text-amber-900 space-y-1">
+              <p><strong>Ejemplo Ref:</strong> {sampleProd.referencia}</p>
+              <p><strong>Campo `imagen_url`:</strong> {sampleProd.imagen_url || 'VACÍO'}</p>
+              <p><strong>Campo `url_imagen`:</strong> {sampleProd.url_imagen || 'VACÍO'}</p>
+              <p><strong>Campo `imagen`:</strong> {sampleProd.imagen || 'VACÍO'}</p>
+              <p><strong>URL generada esperada:</strong> {`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${sampleProd.referencia}.jpg`}</p>
+            </div>
+          )}
+        </div>
+
+        {/* PANEL CONTROL */}
         <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-sm space-y-4 print:hidden">
           {currentUserRole === 'admin' && (
             <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-4">
-              <div className="flex items-center space-x-2 text-slate-700 text-xs font-bold mb-2">
-                <span>⚙️ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo</span>
+              <div className="text-slate-700 text-xs font-bold mb-2">
+                ⚙️ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo
               </div>
               
               <form onSubmit={handleFileUpload} className="flex flex-wrap items-center gap-2">
                 <input
                   type="file"
                   accept=".xlsx, .xls, .csv"
-                  className="text-xs text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-gray-200 rounded-lg"
+                  className="text-xs text-gray-600 border border-gray-200 rounded-lg p-1"
                 />
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="bg-[#94a3b8] hover:bg-slate-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition"
+                  className="bg-[#94a3b8] hover:bg-slate-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg"
                 >
                   🔖 {uploading ? 'Cargando...' : 'Actualizar Catálogo'}
                 </button>
               </form>
 
               {uploadStatus && (
-                <div className="mt-2 text-xs text-emerald-700 font-semibold flex items-center gap-1">
-                  <span>✅</span> {uploadStatus.message}
+                <div className="mt-2 text-xs text-emerald-700 font-semibold">
+                  ✅ {uploadStatus.message}
                 </div>
               )}
             </div>
@@ -347,11 +372,11 @@ export default function CatalogoPage() {
             <div className="flex items-center space-x-3">
               <span className="text-3xl">📦</span>
               <div>
-                <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight leading-none">
+                <h1 className="text-2xl font-extrabold text-gray-900 leading-none">
                   Catálogo de Productos
                 </h1>
                 <div className="text-xs text-gray-500 font-medium mt-1 flex items-center gap-2">
-                  <span>Mostrando: <strong className="text-blue-600">{filteredProducts.length}</strong> de {products.length} productos</span>
+                  <span>Mostrando: <strong className="text-blue-600">{filteredProducts.length}</strong> de {products.length}</span>
                   <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[11px]">
                     👤 {currentUserName}
                   </span>
@@ -362,16 +387,16 @@ export default function CatalogoPage() {
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
-                placeholder="Buscar por Ref o Nombre..."
+                placeholder="Buscar..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs w-48"
               />
 
               <select
                 value={selectedLine}
                 onChange={(e) => setSelectedLine(e.target.value)}
-                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-medium"
+                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs"
               >
                 <option value="">Todas las Líneas ({lineas.length})</option>
                 {lineas.map((linea) => (
@@ -384,7 +409,7 @@ export default function CatalogoPage() {
               <select
                 value={priceList}
                 onChange={(e) => setPriceList(e.target.value as any)}
-                className="bg-blue-50 border border-blue-200 text-blue-700 font-bold px-3 py-2 rounded-xl text-xs focus:outline-none"
+                className="bg-blue-50 border border-blue-200 text-blue-700 font-bold px-3 py-2 rounded-xl text-xs"
               >
                 <option value="pvp1">Lista PVP 1</option>
                 <option value="pvp3">Lista PVP 3</option>
@@ -393,33 +418,25 @@ export default function CatalogoPage() {
                 <option value="pvp6">Lista PVP 6</option>
               </select>
 
-              <label className="flex items-center gap-1.5 text-xs text-gray-600 bg-gray-50 border border-gray-200 px-2.5 py-2 rounded-xl cursor-pointer select-none">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 bg-gray-50 border border-gray-200 px-2.5 py-2 rounded-xl cursor-pointer">
                 <input
                   type="checkbox"
                   checked={showPrices}
                   onChange={(e) => setShowPrices(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-0"
                 />
                 <span>Ver Precios</span>
               </label>
 
               <button
-                onClick={() => alert('Generando código QR...')}
-                className="bg-[#a855f7] hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1 shadow-sm"
-              >
-                📷 Generar QR
-              </button>
-
-              <button
-                onClick={handleDownloadPDF}
-                className="bg-[#ef4444] hover:bg-red-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1 shadow-sm"
+                onClick={() => window.print()}
+                className="bg-[#ef4444] text-white font-bold text-xs px-3.5 py-2 rounded-xl"
               >
                 🚩 PDF
               </button>
 
               <button
                 onClick={handleLogout}
-                className="bg-[#1e293b] hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1 shadow-sm"
+                className="bg-[#1e293b] text-white font-bold text-xs px-3.5 py-2 rounded-xl"
               >
                 🚪 Salir
               </button>
@@ -436,15 +453,19 @@ export default function CatalogoPage() {
               return (
                 <div
                   key={p.referencia}
-                  className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow relative print:break-inside-avoid"
+                  className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid"
                 >
-                  <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 relative flex items-center justify-center p-2">
-                    <ProductImage product={p} onImageClick={(url) => setPreviewImage(url)} />
+                  <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2">
+                    <ProductImage
+                      product={p}
+                      bucketName={bucketName}
+                      onImageClick={(url) => setPreviewImage(url)}
+                    />
                   </div>
 
                   <div className="flex-1 flex flex-col justify-between">
                     <div>
-                      <div className="text-[10px] font-bold text-blue-600 uppercase tracking-tight mb-0.5">
+                      <div className="text-[10px] font-bold text-blue-600 uppercase mb-0.5">
                         {p.linea}
                       </div>
 
@@ -483,22 +504,15 @@ export default function CatalogoPage() {
         )}
       </div>
 
-      <footer className="hidden print:block fixed bottom-0 left-0 right-0 text-center py-2 bg-white border-t border-gray-200">
-        <p className="text-[10px] font-bold text-gray-700 tracking-wider">
-          * PRECIOS NO INCLUYEN IVA *
-        </p>
-      </footer>
-
-      {/* MODAL DE AMPLIAIÓN DE IMAGEN */}
       {previewImage && (
         <div
           className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
           onClick={() => setPreviewImage(null)}
         >
-          <div className="relative max-w-2xl w-full bg-white rounded-2xl overflow-hidden p-2 shadow-2xl">
+          <div className="relative max-w-2xl w-full bg-white rounded-2xl p-2 shadow-2xl">
             <button
               onClick={() => setPreviewImage(null)}
-              className="absolute top-3 right-3 bg-gray-900 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm hover:bg-gray-700 z-10"
+              className="absolute top-3 right-3 bg-gray-900 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
             >
               ✕
             </button>
