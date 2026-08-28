@@ -19,7 +19,9 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
-  imagen_url: string;
+  imagen_url?: string;
+  url_imagen?: string;
+  imagen?: string;
   estado_analisis?: string;
 }
 
@@ -60,7 +62,6 @@ export default function CatalogoPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,10 +169,6 @@ export default function CatalogoPage() {
     }
   };
 
-  const handleImageError = (ref: string) => {
-    setFailedImages((prev) => ({ ...prev, [ref]: true }));
-  };
-
   const handleDownloadPDF = () => {
     window.print();
   };
@@ -239,19 +236,14 @@ export default function CatalogoPage() {
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
         
-        {/* ENCABEZADO PDF CON VERIFICACIÓN DE LOGO */}
+        {/* ENCABEZADO PDF: SOLO EL LOGO SIN TEXTO AZUL */}
         <div className="hidden print:flex items-center justify-between border-b-2 border-gray-300 pb-3 mb-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center">
             <img 
               src="/logo-texcomercial.jpg" 
-              alt="Texcomercial" 
+              alt="Texcomercial Logo" 
               className="h-16 object-contain"
-              onError={(e) => {
-                // Si la imagen local falla, mostrar texto estructurado alternativo en el PDF
-                (e.target as HTMLElement).style.display = 'none';
-              }}
             />
-            <span className="text-xl font-black text-blue-900 tracking-tight"></span>
           </div>
           <div className="text-right">
             <h2 className="text-xl font-bold text-gray-900">CATÁLOGO DE PRODUCTOS</h2>
@@ -374,12 +366,14 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        {/* CONTENIDO Y TARJETAS */}
+        {/* GRILLA DE PRODUCTOS */}
         {!loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3">
             {filteredProducts.map((p) => {
               const price = p[priceList] || 0;
-              const hasImage = p.imagen_url && p.imagen_url.trim() !== '' && !failedImages[p.referencia];
+              // Detección flexible del campo URL de la imagen en Supabase
+              const rawUrl = p.imagen_url || p.url_imagen || p.imagen || '';
+              const cleanUrl = rawUrl.trim();
 
               return (
                 <div
@@ -387,13 +381,16 @@ export default function CatalogoPage() {
                   className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow relative print:break-inside-avoid"
                 >
                   <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 relative flex items-center justify-center p-2">
-                    {hasImage ? (
+                    {cleanUrl ? (
                       <img
-                        src={p.imagen_url}
+                        src={cleanUrl}
                         alt=""
-                        onError={() => handleImageError(p.referencia)}
                         className="w-full h-full object-contain cursor-pointer"
-                        onClick={() => setPreviewImage(p.imagen_url)}
+                        onClick={() => setPreviewImage(cleanUrl)}
+                        onError={(e) => {
+                          // Si falla el enlace directo por HTTP, oculta el elemento roto
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
                       />
                     ) : (
                       <div className="text-center text-gray-300">
