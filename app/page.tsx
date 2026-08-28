@@ -19,9 +19,7 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
-  imagen_url?: string;
-  url_imagen?: string;
-  imagen?: string;
+  [key: string]: any; // Para soportar cualquier nombre de columna dinámicamente
 }
 
 const USERS_DATABASE: Record<string, { pass: string; role: string; name: string }> = {
@@ -39,31 +37,45 @@ const USERS_DATABASE: Record<string, { pass: string; role: string; name: string 
   'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'vendedor', name: 'Madeleine Vizcaino' },
 };
 
-// Función para transformar URLs de Google Drive a URLs de imagen directas
-function formatImageUrl(url: string | undefined, ref: string, bucketName: string): string {
-  if (!url) {
-    const cleanRef = (ref || '').trim().replace(/\//g, '_');
-    return `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`;
-  }
+// Extrae cualquier URL presente en el objeto del producto o convierte Google Drive a URL directa
+function resolveImageUrl(product: Product, bucketName: string): string[] {
+  let foundUrl = '';
 
-  const trimmedUrl = url.trim();
-
-  // Si es un enlace de Google Drive
-  if (trimmedUrl.includes('drive.google.com') || trimmedUrl.includes('docs.google.com')) {
-    // Extraer ID usando Regex
-    const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || trimmedUrl.match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      // Endpoint CDN rápido y directo de Google
-      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+  // 1. Buscar entre todos los valores del objeto del producto si alguno contiene "http"
+  for (const key of Object.keys(product)) {
+    const val = product[key];
+    if (typeof val === 'string' && val.trim().startsWith('http')) {
+      foundUrl = val.trim();
+      break;
     }
   }
 
-  // Si es URL relativa o nombre de archivo de Supabase
-  if (!trimmedUrl.startsWith('http')) {
-    return `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${trimmedUrl}`;
+  // 2. Si encontramos una URL de Google Drive, convertirla a sus formatos de imagen directos
+  if (foundUrl.includes('drive.google.com') || foundUrl.includes('docs.google.com')) {
+    const match = foundUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || foundUrl.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      const fileId = match[1];
+      return [
+        `https://lh3.googleusercontent.com/d/${fileId}`,
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`,
+        `https://drive.google.com/uc?export=view&id=${fileId}`
+      ];
+    }
   }
 
-  return trimmedUrl;
+  // 3. Si es una URL HTTP directa de otro servidor
+  if (foundUrl) {
+    return [foundUrl];
+  }
+
+  // 4. Si no tiene URL guardada, fallback a Supabase Storage por referencia
+  const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
+  return [
+    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`,
+    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.png`,
+    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpeg`,
+    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.JPG`
+  ];
 }
 
 function ProductImage({ 
@@ -75,41 +87,28 @@ function ProductImage({
   bucketName: string;
   onImageClick: (url: string) => void;
 }) {
-  const rawDbUrl = product.imagen_url || product.url_imagen || product.imagen || '';
-  const [imageSrc, setImageSrc] = useState<string>('');
-  const [attempt, setAttempt] = useState<number>(0);
+  const [candidateUrls, setCandidateUrls] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [hasError, setHasError] = useState<boolean>(false);
 
   useEffect(() => {
+    const urls = resolveImageUrl(product, bucketName);
+    setCandidateUrls(urls);
+    setCurrentIndex(0);
     setHasError(false);
-    setAttempt(0);
-    const initialUrl = formatImageUrl(rawDbUrl, product.referencia, bucketName);
-    setImageSrc(initialUrl);
-  }, [product, bucketName, rawDbUrl]);
+  }, [product, bucketName]);
 
   const handleError = () => {
-    // Si la imagen de Google Drive (lh3.googleusercontent.com) falla, probar con la URL secundaria de exportación
-    if (imageSrc.includes('lh3.googleusercontent.com/d/')) {
-      const id = imageSrc.split('/d/')[1];
-      setImageSrc(`https://drive.google.com/uc?export=view&id=${id}`);
-      setAttempt(1);
-      return;
-    }
-
-    // Probar formatos locales si todo lo demás falla
-    const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
-    if (attempt === 0 || attempt === 1) {
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.png`);
-      setAttempt(2);
-    } else if (attempt === 2) {
-      setImageSrc(`${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpeg`);
-      setAttempt(3);
+    if (currentIndex + 1 < candidateUrls.length) {
+      setCurrentIndex((prev) => prev + 1);
     } else {
       setHasError(true);
     }
   };
 
-  if (hasError) {
+  const currentSrc = candidateUrls[currentIndex] || '';
+
+  if (hasError || !currentSrc) {
     return (
       <div className="text-center p-2">
         <span className="text-2xl">🖼️</span>
@@ -120,12 +119,13 @@ function ProductImage({
 
   return (
     <img
-      src={imageSrc}
+      src={currentSrc}
       alt={product.descripcion || product.referencia}
       onError={handleError}
-      onClick={() => onImageClick(imageSrc)}
+      onClick={() => onImageClick(currentSrc)}
       className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
       referrerPolicy="no-referrer"
+      crossOrigin="anonymous"
     />
   );
 }
