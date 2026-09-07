@@ -52,50 +52,53 @@ export async function processAndUploadCatalog(formData: FormData) {
       return { success: false, error: 'El archivo subido está vacío o no tiene el formato correcto.' };
     }
 
-    // Mapear y procesar cada fila del archivo
-    const formattedProducts: ProductRecord[] = rawRows
-      .map((row) => {
-        // Mapeo flexible para nombres de encabezados
-        const referencia = String(row['Referencia'] || row['referencia'] || row['CODIGO'] || row['codigo'] || '').trim();
-        const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['descripcion'] || row['Descripción'] || '').trim();
-        const linea = String(row['Linea'] || row['LINEA'] || row['linea'] || row['Línea'] || '').trim();
+    // MAPA PARA ELIMINAR DUPLICADOS EN EL MISMO ARCHIVO POR REFERENCIA
+    const uniqueProductsMap = new Map<string, ProductRecord>();
 
-        // Mapeo específico para la columna ESTADO COMPRA
-        const estadoCompraRaw = 
-          row['estado compra'] || 
-          row['ESTADO COMPRA'] || 
-          row['Estado Compra'] || 
-          row['estado_compra'] || 
-          row['ESTADO PARA ANALISIS DE COMPRAS'] || 
-          row['ESTADO PARA ANÁLISIS DE COMPRAS'] || 
-          'SI - SI SE ANALIZA PARA COMPRAS';
+    rawRows.forEach((row) => {
+      const referencia = String(row['Referencia'] || row['referencia'] || row['CODIGO'] || row['codigo'] || '').trim();
+      if (!referencia) return;
 
-        const estadoCompra = String(estadoCompraRaw).trim();
+      const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['descripcion'] || row['Descripción'] || '').trim();
+      const linea = String(row['Linea'] || row['LINEA'] || row['linea'] || row['Línea'] || '').trim();
 
-        // Conversión y limpieza de valores numéricos
-        const pvp1 = parseFloat(String(row['PVP1'] || row['pvp1'] || '0').replace(',', '.')) || 0;
-        const pvp3 = parseFloat(String(row['PVP3'] || row['pvp3'] || '0').replace(',', '.')) || 0;
-        const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || '0').replace(',', '.')) || 0;
-        const pvp5 = parseFloat(String(row['PVP5'] || row['pvp5'] || '0').replace(',', '.')) || 0;
-        const pvp6 = parseFloat(String(row['PVP6'] || row['pvp6'] || '0').replace(',', '.')) || 0;
+      // Mapeo para la columna ESTADO COMPRA
+      const estadoCompraRaw = 
+        row['estado compra'] || 
+        row['ESTADO COMPRA'] || 
+        row['Estado Compra'] || 
+        row['estado_compra'] || 
+        row['ESTADO PARA ANALISIS DE COMPRAS'] || 
+        row['ESTADO PARA ANÁLISIS DE COMPRAS'] || 
+        'SI - SI SE ANALIZA PARA COMPRAS';
 
-        const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['existencia'] || row['Stock'] || '0'), 10) || 0;
+      const estadoCompra = String(estadoCompraRaw).trim();
 
-        return {
-          referencia,
-          descripcion,
-          linea,
-          pvp1,
-          pvp3,
-          pvp4,
-          pvp5,
-          pvp6,
-          existencia,
-          estado_compra: estadoCompra,
-        };
-      })
-      // Omitir filas sin referencia válida
-      .filter((p) => p.referencia !== '');
+      // Conversión y limpieza numérica
+      const pvp1 = parseFloat(String(row['PVP1'] || row['pvp1'] || '0').replace(',', '.')) || 0;
+      const pvp3 = parseFloat(String(row['PVP3'] || row['pvp3'] || '0').replace(',', '.')) || 0;
+      const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || '0').replace(',', '.')) || 0;
+      const pvp5 = parseFloat(String(row['PVP5'] || row['pvp5'] || '0').replace(',', '.')) || 0;
+      const pvp6 = parseFloat(String(row['PVP6'] || row['pvp6'] || '0').replace(',', '.')) || 0;
+
+      const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['existencia'] || row['Stock'] || '0'), 10) || 0;
+
+      // Se guarda o sobrescribe en el Map (así nos aseguramos de no enviar referencias duplicadas a Supabase)
+      uniqueProductsMap.set(referencia, {
+        referencia,
+        descripcion,
+        linea,
+        pvp1,
+        pvp3,
+        pvp4,
+        pvp5,
+        pvp6,
+        existencia,
+        estado_compra: estadoCompra,
+      });
+    });
+
+    const formattedProducts = Array.from(uniqueProductsMap.values());
 
     if (formattedProducts.length === 0) {
       return { success: false, error: 'No se encontraron filas con el campo "Referencia" válido.' };
