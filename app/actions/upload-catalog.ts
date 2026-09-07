@@ -38,6 +38,18 @@ function parseNum(v: any): number {
   return isNaN(n) ? 0 : n;
 }
 
+// Convertir enlaces de Google Drive a URLs que carguen directo en la etiqueta <img>
+function formatDriveUrl(url: string): string {
+  if (!url) return '';
+  if (url.includes('drive.google.com')) {
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+  return url;
+}
+
 export async function processAndUploadCatalog(formData: FormData) {
   try {
     const userRole = formData.get('user') as string;
@@ -57,10 +69,9 @@ export async function processAndUploadCatalog(formData: FormData) {
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
 
-    // Leer como matriz/arreglo (filas con celdas por posición)
     const rawMatrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     if (!rawMatrix || rawMatrix.length === 0) {
-      return { success: false, error: 'El archivo Excel está vacío.' };
+      return { success: false, error: 'El archivo está vacío.' };
     }
 
     const uniqueProductsMap = new Map<string, ProductRecord>();
@@ -71,16 +82,15 @@ export async function processAndUploadCatalog(formData: FormData) {
 
       const col0 = sanitizeText(row[0]);
       if (!col0 || col0.toUpperCase() === 'REFERENCIA' || col0.toUpperCase() === 'REF') {
-        continue; // Ignorar cabeceras
+        continue;
       }
 
       const referencia = col0;
       const descripcion = sanitizeText(row[1]);
 
-      // Detectar dinámicamente si la columna 2 es Unidad (UND) o Línea
       let lineaIndex = 2;
       if (sanitizeText(row[2]).toUpperCase() === 'UND' || sanitizeText(row[2]).length <= 3) {
-        lineaIndex = 3; // Hay columna de Unidad, por lo que Línea está en la celda 3
+        lineaIndex = 3;
       }
 
       let lineaRaw = sanitizeText(row[lineaIndex]);
@@ -95,12 +105,11 @@ export async function processAndUploadCatalog(formData: FormData) {
       const pvp5 = parseNum(row[lineaIndex + 5]);
       const pvp6 = parseNum(row[lineaIndex + 6]);
 
-      // Buscar URL de imagen de Google Drive en las siguientes columnas
       let imagenUrl = '';
       for (let i = lineaIndex + 7; i < row.length; i++) {
         const val = sanitizeText(row[i]);
         if (val.includes('http://') || val.includes('https://') || val.includes('drive.google')) {
-          imagenUrl = val;
+          imagenUrl = formatDriveUrl(val);
           break;
         }
       }
@@ -141,7 +150,7 @@ export async function processAndUploadCatalog(formData: FormData) {
     return {
       success: true,
       count: totalInserted,
-      message: `Catálogo actualizado con éxito. (${totalInserted} productos procesados)`,
+      message: `¡Éxito! Se actualizaron ${totalInserted} productos.`,
     };
   } catch (error: any) {
     return { success: false, error: error.message || 'Error al procesar el archivo.' };
