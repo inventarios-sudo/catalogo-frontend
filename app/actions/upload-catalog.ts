@@ -3,156 +3,134 @@
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Inicializar cliente de Supabase (usa las variables de entorno de tu proyecto)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-export interface ProductRecord {
-  referencia: string;
-  descripcion: string;
-  linea: string;
-  pvp1: number;
-  pvp3: number;
-  pvp4: number;
-  pvp5: number;
-  pvp6: number;
-  existencia: number;
-  imagen?: string;
-  estado_compra?: string;
-}
-
-function sanitizeText(val: any): string {
-  if (val === null || val === undefined) return '';
-  return String(val)
-    .replace(/NIÃ'A/g, 'NIÑA')
-    .replace(/NIÑ'A/g, 'NIÑA')
-    .replace(/COMPAÃIA/g, 'COMPAÑIA')
-    .replace(/\uFFFD/g, 'Ñ')
-    .trim();
-}
-
-function parseNum(v: any): number {
-  if (!v) return 0;
-  const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
-  return isNaN(n) ? 0 : n;
-}
-
-// Convertir enlaces de Google Drive a URLs que carguen directo en la etiqueta <img>
-function formatDriveUrl(url: string): string {
+/**
+ * Convierte un enlace de Google Drive en un enlace directo de imagen
+ */
+function convertDriveUrl(url: string): string {
   if (!url) return '';
-  if (url.includes('drive.google.com')) {
-    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      return `https://lh3.googleusercontent.com/d/${match[1]}`;
-    }
+  const strUrl = url.toString().trim();
+  
+  // Buscar el ID en formatos tipo /d/ID/view o id=ID
+  const match = strUrl.match(/\/d\/([^\/]+)/) || strUrl.match(/id=([^&]+)/);
+  
+  if (match && match[1]) {
+    return `https://lh3.googleusercontent.com/d/${match[1]}`;
   }
-  return url;
+  
+  return strUrl;
+}
+
+/**
+ * Parsea un valor a número decimal/entero de forma segura
+ */
+function parseNumber(val: any): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const cleaned = val.toString().replace(/[^0-9.-]+/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
 }
 
 export async function processAndUploadCatalog(formData: FormData) {
   try {
-    const userRole = formData.get('user') as string;
-    if (userRole !== 'admin') {
-      return { success: false, error: 'No tienes permisos de administrador.' };
-    }
-
     const file = formData.get('file') as File;
+
     if (!file) {
-      return { success: false, error: 'No se ha adjuntado ningún archivo.' };
+      return { success: false, error: 'No se seleccionó ningún archivo.' };
     }
 
+    // Leer el archivo enviado como buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const workbook = XLSX.read(buffer, { type: 'buffer', codepage: 65001 });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
+    // Parsear el libro de Excel / CSV
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
 
-    const rawMatrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    if (!rawMatrix || rawMatrix.length === 0) {
-      return { success: false, error: 'El archivo está vacío.' };
+    // Convertir la hoja a objetos JSON
+    const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+    if (!rawRows || rawRows.length === 0) {
+      return { success: false, error: 'El archivo está vacío o no tiene un formato válido.' };
     }
 
-    const uniqueProductsMap = new Map<string, ProductRecord>();
+    // Mapeo y limpieza de datos
+    const productsToInsert = rawRows
+      .map((row) => {
+        // Normalizar los nombres de las columnas a minúsculas para evitar diferencias de mayúsculas
+        const normalizedRow: Record<string, any> = {};
+        Object.keys(row).forEach((key) => {
+          normalizedRow[key.trim().toLowerCase()] = row[key];
+        });
 
-    for (let rowIndex = 0; rowIndex < rawMatrix.length; rowIndex++) {
-      const row = rawMatrix[rowIndex];
-      if (!row || row.length === 0) continue;
+        // Obtener la referencia
+        const referencia = (normalizedRow['referencia'] || '').toString().trim();
 
-      const col0 = sanitizeText(row[0]);
-      if (!col0 || col0.toUpperCase() === 'REFERENCIA' || col0.toUpperCase() === 'REF') {
-        continue;
-      }
+        // Ignorar filas que no tengan referencia
+        if (!referencia) return null;
 
-      const referencia = col0;
-      const descripcion = sanitizeText(row[1]);
+        // Procesar la URL de la imagen (Columna 'Imagen' o 'imagen')
+        const rawImageUrl = (normalizedRow['imagen'] || '').toString().trim();
+        const cleanImageUrl = convertDriveUrl(rawImageUrl);
 
-      let lineaIndex = 2;
-      if (sanitizeText(row[2]).toUpperCase() === 'UND' || sanitizeText(row[2]).length <= 3) {
-        lineaIndex = 3;
-      }
+        return {
+          referencia: referencia,
+          descripcion: (normalizedRow['descripcion'] || '').toString().trim(),
+          um_precio: (normalizedRow['u.m. precio'] || normalizedRow['u.m.precio'] || normalizedRow['um_precio'] || '').toString().trim(),
+          linea: (normalizedRow['linea'] || '').toString().trim(),
+          existencia: parseNumber(normalizedRow['existencia']),
+          pvp1: parseNumber(normalizedRow['pvp1']),
+          pvp3: parseNumber(normalizedRow['pvp3']),
+          pvp4: parseNumber(normalizedRow['pvp4']),
+          pvp5: parseNumber(normalizedRow['pvp5']),
+          pvp6: parseNumber(normalizedRow['pvp6']),
+          imagen: cleanImageUrl,
+          estado_compra: (normalizedRow['estado compra'] || normalizedRow['estado_compra'] || '').toString().trim(),
+        };
+      })
+      .filter((item) => item !== null); // Filtrar filas vacías
 
-      let lineaRaw = sanitizeText(row[lineaIndex]);
-      if (!lineaRaw || !isNaN(Number(lineaRaw)) || /^[\d.,\s]+$/.test(lineaRaw)) {
-        lineaRaw = 'SIN LÍNEA';
-      }
-
-      const existencia = parseInt(String(row[lineaIndex + 1] || '0').replace(',', '.'), 10) || 0;
-      const pvp1 = parseNum(row[lineaIndex + 2]);
-      const pvp3 = parseNum(row[lineaIndex + 3]);
-      const pvp4 = parseNum(row[lineaIndex + 4]);
-      const pvp5 = parseNum(row[lineaIndex + 5]);
-      const pvp6 = parseNum(row[lineaIndex + 6]);
-
-      let imagenUrl = '';
-      for (let i = lineaIndex + 7; i < row.length; i++) {
-        const val = sanitizeText(row[i]);
-        if (val.includes('http://') || val.includes('https://') || val.includes('drive.google')) {
-          imagenUrl = formatDriveUrl(val);
-          break;
-        }
-      }
-
-      const estadoCompra = sanitizeText(row[row.length - 1] || 'SI - SI SE ANALIZA PARA COMPRAS');
-
-      uniqueProductsMap.set(referencia, {
-        referencia,
-        descripcion,
-        linea: lineaRaw,
-        pvp1,
-        pvp3,
-        pvp4,
-        pvp5,
-        pvp6,
-        existencia,
-        imagen: imagenUrl,
-        estado_compra: estadoCompra,
-      });
+    if (productsToInsert.length === 0) {
+      return { success: false, error: 'No se encontraron datos válidos con la columna "Referencia".' };
     }
 
-    const formattedProducts = Array.from(uniqueProductsMap.values());
-    const chunkSize = 500;
+    // 1. Opcional: Limpiar o vaciar la tabla actual antes de insertar
+    // const { error: deleteError } = await supabase.from('products').delete().neq('referencia', '');
+    // if (deleteError) console.error('Error al limpiar la tabla:', deleteError);
+
+    // 2. Insertar/Actualizar en Supabase en bloques de 500 registros
+    const BATCH_SIZE = 500;
     let totalInserted = 0;
 
-    for (let i = 0; i < formattedProducts.length; i += chunkSize) {
-      const chunk = formattedProducts.slice(i, i + chunkSize);
+    for (let i = 0; i < productsToInsert.length; i += BATCH_SIZE) {
+      const batch = productsToInsert.slice(i, i + BATCH_SIZE);
+
       const { error } = await supabase
         .from('products')
-        .upsert(chunk, { onConflict: 'referencia' });
+        .upsert(batch, { onConflict: 'referencia' }); // Utiliza 'referencia' como clave única
 
       if (error) {
-        return { success: false, error: `Error DB: ${error.message}` };
+        console.error(`Error en el lote ${i / BATCH_SIZE + 1}:`, error);
+        return { success: false, error: `Error guardando en base de datos: ${error.message}` };
       }
-      totalInserted += chunk.length;
+
+      totalInserted += batch.length;
     }
 
     return {
       success: true,
-      count: totalInserted,
       message: `¡Éxito! Se actualizaron ${totalInserted} productos.`,
+      count: totalInserted,
     };
   } catch (error: any) {
-    return { success: false, error: error.message || 'Error al procesar el archivo.' };
+    console.error('Error en processAndUploadCatalog:', error);
+    return { success: false, error: error?.message || 'Error interno al procesar el archivo.' };
   }
 }
