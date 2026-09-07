@@ -42,6 +42,7 @@ export async function processAndUploadCatalog(formData: FormData) {
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
 
+    // Convertir la hoja leyendo tanto por nombre de columna como por posición
     const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
     if (!rawRows || rawRows.length === 0) {
@@ -51,48 +52,43 @@ export async function processAndUploadCatalog(formData: FormData) {
     const uniqueProductsMap = new Map<string, ProductRecord>();
 
     rawRows.forEach((row) => {
-      const referencia = String(row['Referencia'] || row['referencia'] || row['CODIGO'] || row['codigo'] || '').trim();
-      if (!referencia) return;
+      // 1. REFERENCIA (Columna A)
+      const referencia = String(row['Referencia'] || row['referencia'] || row['A'] || '').trim();
+      if (!referencia || referencia.toUpperCase() === 'REFERENCIA') return; // Omite encabezados redundantes
 
-      const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['descripcion'] || row['Descripción'] || '').trim();
+      // 2. DESCRIPCIÓN (Columna B)
+      const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['Descripción'] || row['B'] || '').trim();
+
+      // 3. LÍNEA (Columna D exacta)
+      let lineaRaw = String(row['Linea'] || row['LINEA'] || row['Línea'] || row['D'] || 'SIN LÍNEA').trim();
       
-      // LECTURA ROBUSTA DE LÍNEA (EVITA QUE VALORES NUMÉRICOS/PRECIOS ENTREN COMO LÍNEA)
-      let lineaRaw = String(
-        row['Linea'] || 
-        row['LINEA'] || 
-        row['linea'] || 
-        row['Línea'] || 
-        row['PROVEEDOR'] || 
-        row['Proveedor'] || 
-        'SIN LÍNEA'
-      ).trim();
-
-      // Si el valor detectado es un número puro (un precio desplazado), lo marcamos como SIN LÍNEA
+      // Si por alguna razón la línea leída es un precio/número, forzamos 'SIN LÍNEA'
       if (!isNaN(Number(lineaRaw)) || /^[\d.,]+$/.test(lineaRaw)) {
         lineaRaw = 'SIN LÍNEA';
       }
 
-      // Mapeo para ESTADO COMPRA
+      // 4. EXISTENCIA (Columna E)
+      const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['E'] || '0'), 10) || 0;
+
+      // 5. PRECIOS (Columnas F, G, H, I, J)
+      const pvp1 = parseFloat(String(row['PVP1'] || row['pvp1'] || row['F'] || '0').replace(',', '.')) || 0;
+      const pvp3 = parseFloat(String(row['PVP3'] || row['pvp3'] || row['G'] || '0').replace(',', '.')) || 0;
+      const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || '0').replace(',', '.')) || 0;
+      const pvp5 = parseFloat(String(row['PVP5'] || row['pvp5'] || '0').replace(',', '.')) || 0;
+      const pvp6 = parseFloat(String(row['PVP6'] || row['pvp6'] || '0').replace(',', '.')) || 0;
+
+      // 6. ESTADO COMPRA (Columna L)
       const estadoCompraRaw = 
         row['estado compra'] || 
         row['ESTADO COMPRA'] || 
         row['Estado Compra'] || 
         row['estado_compra'] || 
-        row['ESTADO PARA ANALISIS DE COMPRAS'] || 
-        row['ESTADO PARA ANÁLISIS DE COMPRAS'] || 
+        row['L'] || 
         'SI - SI SE ANALIZA PARA COMPRAS';
 
       const estadoCompra = String(estadoCompraRaw).trim();
 
-      // Conversión numérica limpia
-      const pvp1 = parseFloat(String(row['PVP1'] || row['pvp1'] || '0').replace(',', '.')) || 0;
-      const pvp3 = parseFloat(String(row['PVP3'] || row['pvp3'] || '0').replace(',', '.')) || 0;
-      const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || '0').replace(',', '.')) || 0;
-      const pvp5 = parseFloat(String(row['PVP5'] || row['pvp5'] || '0').replace(',', '.')) || 0;
-      const pvp6 = parseFloat(String(row['PVP6'] || row['pvp6'] || '0').replace(',', '.')) || 0;
-
-      const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['existencia'] || row['Stock'] || '0'), 10) || 0;
-
+      // Guardar único por referencia
       uniqueProductsMap.set(referencia, {
         referencia,
         descripcion,
@@ -113,6 +109,7 @@ export async function processAndUploadCatalog(formData: FormData) {
       return { success: false, error: 'No se encontraron filas con el campo "Referencia" válido.' };
     }
 
+    // Subir a Supabase en bloques
     const chunkSize = 500;
     let totalInserted = 0;
 
