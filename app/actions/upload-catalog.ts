@@ -26,7 +26,6 @@ export async function processAndUploadCatalog(formData: FormData) {
   try {
     const userRole = formData.get('user') as string;
 
-    // Validación de seguridad por rol
     if (userRole !== 'admin') {
       return { success: false, error: 'No tienes permisos de administrador para subir archivos.' };
     }
@@ -36,23 +35,19 @@ export async function processAndUploadCatalog(formData: FormData) {
       return { success: false, error: 'No se ha adjuntado ningún archivo.' };
     }
 
-    // Convertir el archivo cargado a Buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Leer el libro de trabajo Excel/CSV
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
 
-    // Convertir la hoja a JSON
     const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
     if (!rawRows || rawRows.length === 0) {
       return { success: false, error: 'El archivo subido está vacío o no tiene el formato correcto.' };
     }
 
-    // MAPA PARA ELIMINAR DUPLICADOS EN EL MISMO ARCHIVO POR REFERENCIA
     const uniqueProductsMap = new Map<string, ProductRecord>();
 
     rawRows.forEach((row) => {
@@ -60,9 +55,24 @@ export async function processAndUploadCatalog(formData: FormData) {
       if (!referencia) return;
 
       const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['descripcion'] || row['Descripción'] || '').trim();
-      const linea = String(row['Linea'] || row['LINEA'] || row['linea'] || row['Línea'] || '').trim();
+      
+      // LECTURA ROBUSTA DE LÍNEA (EVITA QUE VALORES NUMÉRICOS/PRECIOS ENTREN COMO LÍNEA)
+      let lineaRaw = String(
+        row['Linea'] || 
+        row['LINEA'] || 
+        row['linea'] || 
+        row['Línea'] || 
+        row['PROVEEDOR'] || 
+        row['Proveedor'] || 
+        'SIN LÍNEA'
+      ).trim();
 
-      // Mapeo para la columna ESTADO COMPRA
+      // Si el valor detectado es un número puro (un precio desplazado), lo marcamos como SIN LÍNEA
+      if (!isNaN(Number(lineaRaw)) || /^[\d.,]+$/.test(lineaRaw)) {
+        lineaRaw = 'SIN LÍNEA';
+      }
+
+      // Mapeo para ESTADO COMPRA
       const estadoCompraRaw = 
         row['estado compra'] || 
         row['ESTADO COMPRA'] || 
@@ -74,7 +84,7 @@ export async function processAndUploadCatalog(formData: FormData) {
 
       const estadoCompra = String(estadoCompraRaw).trim();
 
-      // Conversión y limpieza numérica
+      // Conversión numérica limpia
       const pvp1 = parseFloat(String(row['PVP1'] || row['pvp1'] || '0').replace(',', '.')) || 0;
       const pvp3 = parseFloat(String(row['PVP3'] || row['pvp3'] || '0').replace(',', '.')) || 0;
       const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || '0').replace(',', '.')) || 0;
@@ -83,11 +93,10 @@ export async function processAndUploadCatalog(formData: FormData) {
 
       const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['existencia'] || row['Stock'] || '0'), 10) || 0;
 
-      // Se guarda o sobrescribe en el Map (así nos aseguramos de no enviar referencias duplicadas a Supabase)
       uniqueProductsMap.set(referencia, {
         referencia,
         descripcion,
-        linea,
+        linea: lineaRaw,
         pvp1,
         pvp3,
         pvp4,
@@ -104,7 +113,6 @@ export async function processAndUploadCatalog(formData: FormData) {
       return { success: false, error: 'No se encontraron filas con el campo "Referencia" válido.' };
     }
 
-    // Insertar/Actualizar en Supabase en bloques (chunks)
     const chunkSize = 500;
     let totalInserted = 0;
 
