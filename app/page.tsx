@@ -24,7 +24,7 @@ interface Product {
 }
 
 export default function CatalogPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
@@ -33,8 +33,8 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedLinea, setSelectedLinea] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedPvp, setSelectedPvp] = useState<string>('pvp1');
-  const [verPrecios, setVerPrecios] = useState<boolean>(false);
+  const [selectedPvp, setSelectedPvp] = useState<string>('pvp5');
+  const [verPrecios, setVerPrecios] = useState<boolean>(true);
 
   const [uploadMessage, setUploadMessage] = useState<string>('');
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -65,10 +65,7 @@ export default function CatalogPage() {
           .select('*')
           .range(from, from + step - 1);
 
-        if (error) {
-          console.error('Error al traer productos:', error);
-          break;
-        }
+        if (error) break;
 
         if (data && data.length > 0) {
           allData = [...allData, ...(data as Product[])];
@@ -140,51 +137,75 @@ export default function CatalogPage() {
     setIsUploading(false);
   };
 
+  // PANTALLA DE ACCESO AL CATÁLOGO (Igual a Captura 1)
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-8 text-center text-white">
-            <h2 className="text-2xl font-bold mb-1">Acceso al Catálogo</h2>
+      <div className="min-h-screen bg-[#111827] flex items-center justify-center p-4">
+        <div className="bg-white rounded-[28px] w-full max-w-[420px] overflow-hidden shadow-2xl flex flex-col items-center">
+          <div className="w-full bg-gradient-to-r from-[#2563eb] via-[#3b82f6] to-[#6366f1] p-8 text-center text-white flex flex-col items-center justify-center relative">
+            <div className="w-16 h-16 bg-white/20 rounded-2xl backdrop-blur-md mb-4 flex items-center justify-center">
+              <div className="w-8 h-8 bg-white/30 rounded-lg"></div>
+            </div>
+            <h2 className="text-2xl font-bold mb-1 tracking-tight">Acceso al Catálogo</h2>
+            <p className="text-xs text-blue-100/80 font-normal">
+              Ingresa tus credenciales autorizadas para continuar
+            </p>
           </div>
-          <form onSubmit={handleLogin} className="p-8 space-y-5">
+
+          <form onSubmit={handleLogin} className="w-full p-8 space-y-5">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">USUARIO</label>
+              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                USUARIO
+              </label>
               <input
                 type="text"
+                placeholder="admin"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/30 text-slate-700"
                 required
               />
             </div>
+
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">CONTRASEÑA</label>
+              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                CONTRASEÑA
+              </label>
               <input
                 type="password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/30 text-slate-700"
                 required
               />
             </div>
-            {loginError && <p className="text-xs font-semibold text-rose-500 text-center">{loginError}</p>}
+
+            {loginError && (
+              <p className="text-xs font-semibold text-rose-500 text-center">{loginError}</p>
+            )}
+
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl text-sm"
+              className="w-full bg-[#1d4ed8] hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl text-sm shadow-md transition-all mt-2"
             >
               Iniciar Sesión
             </button>
+
+            <p className="text-[11px] text-slate-400 text-center pt-4 font-medium">
+              Sistema de Inventarios & Catálogo Digital
+            </p>
           </form>
         </div>
       </div>
     );
   }
 
+  // PANTALLA PRINCIPAL DEL CATÁLOGO (Igual a Captura 2)
   return (
     <div className="min-h-screen bg-[#f1f3f6] p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
-        {/* Panel de Administración */}
+        {/* Panel de Carga Masiva */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-slate-400">⚙️</span>
@@ -202,7 +223,7 @@ export default function CatalogPage() {
             <button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-xs hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-1"
+              className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-xs hover:bg-blue-700 disabled:opacity-50 transition"
             >
               🚀 {isUploading ? 'Procesando...' : 'Actualizar Catálogo'}
             </button>
@@ -214,95 +235,98 @@ export default function CatalogPage() {
           )}
         </div>
 
-        {/* Encabezado del Catálogo (Estructura idéntica a la Imagen 2) */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="text-3xl shrink-0">📦</div>
+        {/* Header con estructura exacta */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
+          <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+            <div className="flex items-start gap-3">
+              <span className="text-3xl mt-0.5">📦</span>
               <div>
-                <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">Catálogo de Productos</h1>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-xs text-slate-400 font-medium">
-                    Mostrando: <span className="text-blue-600 font-bold">{filteredProducts.length}</span> de {products.length} productos
-                  </p>
-                  <span className="bg-slate-100 text-slate-600 text-[11px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
-                    👤 Administrador
-                  </span>
-                </div>
+                <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">
+                  Catálogo de Productos
+                </h1>
+                <p className="text-xs text-slate-400 font-medium mt-1">
+                  Mostrando: <span className="text-blue-600 font-bold">{filteredProducts.length}</span> de {products.length} productos
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
-              <input
-                type="text"
-                placeholder="Buscar por Ref o Nombre..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="border border-slate-200 rounded-xl px-3.5 py-2 text-xs w-full sm:w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-              />
-
-              <select
-                value={selectedLinea}
-                onChange={(e) => setSelectedLinea(e.target.value)}
-                className="border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium bg-slate-50/50 text-slate-700 max-w-[200px] truncate"
-              >
-                <option value="">Todas las Líneas ({lineas.length})</option>
-                {lineas.map((linea) => (
-                  <option key={linea} value={linea}>
-                    {linea}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={selectedPvp}
-                onChange={(e) => setSelectedPvp(e.target.value)}
-                className="border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-blue-600 font-bold bg-blue-50/50"
-              >
-                <option value="pvp1">Lista PVP 1</option>
-                <option value="pvp3">Lista PVP 3</option>
-                <option value="pvp4">Lista PVP 4</option>
-                <option value="pvp5">Lista PVP 5</option>
-                <option value="pvp6">Lista PVP 6</option>
-              </select>
-
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer select-none px-2 py-1">
+            <div className="flex flex-col items-end gap-3 w-full md:w-auto">
+              {/* Fila superior de filtros */}
+              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
                 <input
-                  type="checkbox"
-                  checked={verPrecios}
-                  onChange={(e) => setVerPrecios(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  type="text"
+                  placeholder="Buscar por Ref o Nombre..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="border border-blue-500 rounded-full px-4 py-2 text-xs w-full sm:w-52 focus:outline-none bg-white text-slate-700"
                 />
-                Ver Precios
-              </label>
 
-              <button
-                onClick={() => alert('Generando código QR...')}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
-              >
-                <span>💵</span> Generar QR
-              </button>
+                <select
+                  value={selectedLinea}
+                  onChange={(e) => setSelectedLinea(e.target.value)}
+                  className="border border-slate-200 rounded-full px-4 py-2 text-xs focus:outline-none bg-slate-50/50 text-slate-700 font-medium max-w-[200px] truncate"
+                >
+                  <option value="">Todas las Lineas ({lineas.length})</option>
+                  {lineas.map((linea) => (
+                    <option key={linea} value={linea}>
+                      {linea}
+                    </option>
+                  ))}
+                </select>
 
-              <button
-                onClick={() => alert('Generando archivo PDF...')}
-                className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
-              >
-                <span>📄</span> PDF
-              </button>
+                <select
+                  value={selectedPvp}
+                  onChange={(e) => setSelectedPvp(e.target.value)}
+                  className="border border-blue-100 rounded-full px-4 py-2 text-xs focus:outline-none text-blue-600 font-bold bg-blue-50/50"
+                >
+                  <option value="pvp1">Lista PVP 1</option>
+                  <option value="pvp3">Lista PVP 3</option>
+                  <option value="pvp4">Lista PVP 4</option>
+                  <option value="pvp5">Lista PVP 5</option>
+                  <option value="pvp6">Lista PVP 6</option>
+                </select>
 
-              <button
-                onClick={() => setIsAuthenticated(false)}
-                className="bg-[#1e293b] hover:bg-slate-900 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
-              >
-                <span>🚪</span> Salir
-              </button>
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={verPrecios}
+                    onChange={(e) => setVerPrecios(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  />
+                  Ver Precios
+                </label>
+              </div>
+
+              {/* Fila inferior de acciones */}
+              <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                <button
+                  onClick={() => alert('Generando código QR...')}
+                  className="bg-[#8b5cf6] hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
+                >
+                  <span>📷</span> Generar QR
+                </button>
+
+                <button
+                  onClick={() => alert('Generando PDF...')}
+                  className="bg-[#ef4444] hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
+                >
+                  <span>📄</span> PDF
+                </button>
+
+                <button
+                  onClick={() => setIsAuthenticated(false)}
+                  className="bg-[#1e293b] hover:bg-slate-900 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
+                >
+                  <span>🚪</span> Salir
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Rejilla de Productos */}
+        {/* Grilla de productos */}
         {loading ? (
-          <div className="text-center py-16 text-slate-400 font-medium">Cargando la totalidad del catálogo...</div>
+          <div className="text-center py-16 text-slate-400 font-medium">Cargando productos...</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredProducts.map((p) => {
@@ -312,10 +336,10 @@ export default function CatalogPage() {
               return (
                 <div
                   key={p.referencia}
-                  className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+                  className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between"
                 >
                   <div>
-                    <div className="w-full h-44 bg-slate-50 rounded-xl mb-3 overflow-hidden flex items-center justify-center border border-slate-100">
+                    <div className="w-full h-48 bg-slate-100 rounded-xl mb-3 overflow-hidden flex items-center justify-center relative">
                       <img
                         src={imagenUrl}
                         alt={p.descripcion}
@@ -323,14 +347,6 @@ export default function CatalogPage() {
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
-                          if (target.parentElement) {
-                            target.parentElement.innerHTML = `
-                              <div className="text-center p-4">
-                                <div className="text-2xl mb-1 opacity-50">🖼️</div>
-                                <span className="text-[11px] text-slate-400 font-medium">Sin Imagen</span>
-                              </div>
-                            `;
-                          }
                         }}
                       />
                     </div>
@@ -343,27 +359,30 @@ export default function CatalogPage() {
                       {p.descripcion}
                     </h3>
 
-                    <p className="text-[11px] text-slate-400 font-mono mb-3">
+                    <p className="text-[11px] text-slate-400 font-mono mb-4">
                       Ref: <span className="font-bold text-slate-600">{p.referencia}</span>
                     </p>
                   </div>
 
                   <div className="pt-3 border-t border-slate-100 flex items-end justify-between">
                     <div>
+                      <span className="text-[9px] text-slate-400 uppercase font-bold block leading-none mb-1">
+                        PRECIO ({selectedPvp.toUpperCase()})
+                      </span>
                       {verPrecios && precioActual > 0 ? (
-                        <span className="text-sm font-extrabold text-slate-900">
+                        <span className="text-sm font-extrabold text-[#10b981]">
                           ${precioActual.toFixed(2)}
                         </span>
                       ) : (
-                        <span className="text-[11px] text-slate-400 italic">Sin Precio</span>
+                        <span className="text-xs text-slate-400 italic">Sin Precio</span>
                       )}
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[9px] text-slate-400 uppercase font-bold block leading-none mb-0.5">
+                      <span className="text-[9px] text-slate-400 uppercase font-bold block leading-none mb-1">
                         STOCK
                       </span>
-                      <span className="text-xs font-bold text-red-600">
+                      <span className="text-xs font-bold text-[#ef4444]">
                         {p.existencia} und
                       </span>
                     </div>
