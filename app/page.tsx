@@ -31,7 +31,7 @@ interface Product {
  */
 const getDirectDriveUrl = (url: string): string => {
   if (!url) return '';
-  const cleanUrl = url.trim();
+  const cleanUrl = url.toString().trim();
   const match = cleanUrl.match(/\/d\/([^\/]+)/) || cleanUrl.match(/id=([^&]+)/);
   if (match && match[1]) {
     return `https://lh3.googleusercontent.com/d/${match[1]}`;
@@ -61,12 +61,12 @@ export default function CatalogoPage() {
   const [selectedPvp, setSelectedPvp] = useState('pvp1');
   const [showPrices, setShowPrices] = useState(false);
   
-  // Estados de Carga
+  // Estados de Carga y Mensajes
   const [loading, setLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
 
-  // 1. CARGA MASIVA DE TODOS LOS PRODUCTOS DESDE SUPABASE
+  // 1. CARGA COMPLETA DE PRODUCTOS DESDE SUPABASE (SIN LÍMITE DE 2000)
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -75,7 +75,7 @@ export default function CatalogoPage() {
       const pageSize = 1000;
       let hasMore = true;
 
-      // Lectura por lotes para superar la barrera de los 1000/2000 registros
+      // Consulta en bucle para traer la base de datos completa por lotes
       while (hasMore) {
         const { data, error } = await supabase
           .from('products')
@@ -96,7 +96,7 @@ export default function CatalogoPage() {
         }
       }
 
-      // Normalizar datos limpiando espacios invisibles
+      // Limpieza de espacios invisibles
       const normalized = allProducts.map((p) => ({
         ...p,
         referencia: (p.referencia || '').toString().trim(),
@@ -107,7 +107,7 @@ export default function CatalogoPage() {
 
       setProducts(normalized);
 
-      // Obtener lista única de líneas
+      // Extraer lista única de líneas
       const uniqueLineas = Array.from(new Set(normalized.map((p) => p.linea)))
         .filter(Boolean)
         .sort();
@@ -124,7 +124,7 @@ export default function CatalogoPage() {
     fetchProducts();
   }, []);
 
-  // 2. FILTRADO DINÁMICO EN MEMORIA (BÚSQUEDA Y LÍNEAS)
+  // 2. FILTRADO DINÁMICO (BÚSQUEDA Y LÍNEAS)
   useEffect(() => {
     let result = products;
 
@@ -146,20 +146,20 @@ export default function CatalogoPage() {
     setFilteredProducts(result);
   }, [searchTerm, selectedLine, products]);
 
-  // 3. PROCESAMIENTO RÁPIDO Y ACTUALIZACIÓN EN CLIENTE (CSV)
+  // 3. PROCESAMIENTO RÁPIDO EN CLIENTE CON PAPAPARSE
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    setUploadMessage('Procesando archivo...');
+    setUploadMessage('Leyendo archivo CSV...');
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
         try {
-          // Mapeo y limpieza del CSV enviado
+          // Normalizar celdas e imágenes del CSV
           const productsToInsert = results.data
             .map((row: any) => {
               const normalizedRow: Record<string, any> = {};
@@ -195,14 +195,15 @@ export default function CatalogoPage() {
             .filter(Boolean);
 
           if (productsToInsert.length === 0) {
-            throw new Error('No se encontraron filas válidas con la columna "Referencia".');
+            throw new Error('No se encontraron filas con la columna "Referencia".');
           }
 
-          // Inserción en Supabase en lotes de 200
-          const BATCH_SIZE = 200;
+          // Enviar a Supabase en lotes pequeños para evitar bloqueos
+          const BATCH_SIZE = 100;
           for (let i = 0; i < productsToInsert.length; i += BATCH_SIZE) {
             const batch = productsToInsert.slice(i, i + BATCH_SIZE);
-            setUploadMessage(`Guardando ${i + batch.length} de ${productsToInsert.length}...`);
+            const currentCount = Math.min(i + BATCH_SIZE, productsToInsert.length);
+            setUploadMessage(`Guardando ${currentCount} de ${productsToInsert.length} productos...`);
             
             const { error } = await supabase
               .from('products')
@@ -212,7 +213,7 @@ export default function CatalogoPage() {
           }
 
           setUploadMessage(`¡Éxito! Se actualizaron ${productsToInsert.length} productos.`);
-          await fetchProducts(); // Refrescar los datos mostrados
+          await fetchProducts(); // Recargar la vista con los nuevos productos
 
         } catch (error: any) {
           console.error(error);
@@ -229,7 +230,7 @@ export default function CatalogoPage() {
     });
   };
 
-  // Obtener el precio activo según el selector de PVP
+  // Obtener precio seleccionado
   const getProductPrice = (product: Product) => {
     switch (selectedPvp) {
       case 'pvp3': return product.pvp3;
@@ -242,44 +243,52 @@ export default function CatalogoPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+      
       {/* PANEL DE ADMINISTRACIÓN */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
-        <h2 className="text-sm font-semibold text-gray-600 mb-2 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-2">
           ⚙ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo
         </h2>
+        
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="file"
             accept=".csv"
             onChange={handleFileUpload}
             disabled={isUploading}
-            className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50 cursor-pointer"
           />
+
           {isUploading && (
-            <span className="text-sm text-amber-600 font-medium animate-pulse">
-              🏷 {uploadMessage}
-            </span>
+            <div className="flex items-center gap-2 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+              <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-xs font-semibold text-amber-700">
+                {uploadMessage}
+              </span>
+            </div>
           )}
+
           {!isUploading && uploadMessage && (
-            <span className="text-sm text-emerald-600 font-medium">
-              ✅ {uploadMessage}
-            </span>
+            <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+              <span className="text-xs font-semibold text-emerald-700">
+                {uploadMessage}
+              </span>
+            </div>
           )}
         </div>
       </div>
 
-      {/* BARRA DE FILTROS Y BÚSQUEDA */}
+      {/* BARRA DE BÚSQUEDA Y FILTROS */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Catálogo de Productos</h1>
-            <p className="text-sm text-gray-500">
-              Mostrando: <span className="font-semibold text-blue-600">{filteredProducts.length}</span> de {products.length}
+            <p className="text-sm text-gray-500 mt-1">
+              Mostrando: <span className="font-semibold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            {/* Buscador */}
             <input
               type="text"
               placeholder="Buscar por Ref o Nombre..."
@@ -288,7 +297,6 @@ export default function CatalogoPage() {
               className="px-4 py-2 border border-gray-300 rounded-lg text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
 
-            {/* Filtro por Línea */}
             <select
               value={selectedLine}
               onChange={(e) => setSelectedLine(e.target.value)}
@@ -302,7 +310,6 @@ export default function CatalogoPage() {
               ))}
             </select>
 
-            {/* Seleccionar Lista de Precio */}
             <select
               value={selectedPvp}
               onChange={(e) => setSelectedPvp(e.target.value)}
@@ -315,25 +322,24 @@ export default function CatalogoPage() {
               <option value="pvp6">Lista PVP 6</option>
             </select>
 
-            {/* Checkbox Mostrar Precios */}
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50">
               <input
                 type="checkbox"
                 checked={showPrices}
                 onChange={(e) => setShowPrices(e.target.checked)}
                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
               />
-              Ver Precios
+              <span>Ver Precios</span>
             </label>
           </div>
         </div>
       </div>
 
-      {/* GRILLA DE PRODUCTOS */}
+      {/* TARJETAS DE PRODUCTOS */}
       {loading ? (
-        <div className="text-center py-20">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent mb-2"></div>
-          <p className="text-gray-500 text-sm">Cargando catálogo completo...</p>
+        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-gray-200">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p className="text-gray-500 text-sm font-medium">Cargando catálogo completo...</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -343,7 +349,6 @@ export default function CatalogoPage() {
               className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col justify-between"
             >
               <div>
-                {/* Imagen del Producto */}
                 <div className="w-full h-48 bg-gray-100 relative overflow-hidden flex items-center justify-center">
                   {product.imagen ? (
                     <img
@@ -351,38 +356,35 @@ export default function CatalogoPage() {
                       alt={product.descripcion}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        // Fallback si falla la carga de la imagen
                         (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300?text=Sin+Imagen';
                       }}
                     />
                   ) : (
-                    <span className="text-xs text-gray-400">Sin Imagen</span>
+                    <span className="text-xs text-gray-400 font-medium">Sin Imagen</span>
                   )}
-                  <span className="absolute top-2 left-2 bg-gray-900/75 text-white text-[10px] px-2 py-0.5 rounded">
+                  <span className="absolute top-2 left-2 bg-gray-900/80 text-white text-[10px] font-mono px-2 py-0.5 rounded shadow">
                     Ref: {product.referencia}
                   </span>
                 </div>
 
-                {/* Detalles */}
                 <div className="p-4">
-                  <p className="text-xs font-semibold text-blue-600 mb-1 uppercase truncate">
+                  <p className="text-xs font-semibold text-blue-600 mb-1 uppercase tracking-wide truncate">
                     {product.linea || 'General'}
                   </p>
-                  <h3 className="text-sm font-medium text-gray-800 line-clamp-2 h-10 mb-2">
+                  <h3 className="text-sm font-medium text-gray-800 line-clamp-2 h-10 mb-2" title={product.descripcion}>
                     {product.descripcion}
                   </h3>
-                  <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                    <span>Stock: <strong className="text-gray-700">{product.existencia}</strong></span>
-                    <span>U.M: <strong className="text-gray-700">{product.um_precio || 'UND'}</strong></span>
+                  <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
+                    <span>Existencia: <strong className="text-gray-800 font-semibold">{product.existencia}</strong></span>
+                    <span>U.M: <strong className="text-gray-800 font-semibold">{product.um_precio || 'UND'}</strong></span>
                   </div>
                 </div>
               </div>
 
-              {/* Precio y Pie */}
               {showPrices && (
-                <div className="p-4 pt-0 border-t border-gray-100 mt-auto flex items-center justify-between">
-                  <span className="text-xs text-gray-400 uppercase font-bold">{selectedPvp}</span>
-                  <span className="text-lg font-bold text-emerald-600">
+                <div className="p-4 pt-2 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase">{selectedPvp}</span>
+                  <span className="text-base font-bold text-emerald-600">
                     ${getProductPrice(product).toFixed(2)}
                   </span>
                 </div>
@@ -392,12 +394,12 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* MENSAJE SI NO HAY RESULTADOS */}
       {!loading && filteredProducts.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-          <p className="text-gray-500">No se encontraron productos que coincidan con la búsqueda.</p>
+        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+          <p className="text-gray-500 font-medium">No se encontraron productos que coincidan con la búsqueda.</p>
         </div>
       )}
+
     </div>
   );
 }
