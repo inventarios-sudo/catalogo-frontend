@@ -3,129 +3,137 @@
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 
-const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+export interface ProductRecord {
+  referencia: string;
+  descripcion: string;
+  linea: string;
+  pvp1: number;
+  pvp3: number;
+  pvp4: number;
+  pvp5: number;
+  pvp6: number;
+  existencia: number;
+  imagen?: string;
+  estado_compra?: string;
+  [key: string]: any;
+}
+
 export async function processAndUploadCatalog(formData: FormData) {
   try {
-    const currentUser = (formData.get('user') as string || '').toLowerCase().trim();
+    const userRole = formData.get('user') as string;
 
-    if (currentUser !== 'admin') {
-      return { 
-        success: false, 
-        error: '⛔ Acceso denegado: Solo la cuenta Administrador tiene permisos para realizar cargas masivas.' 
-      };
+    // Validación de seguridad por rol
+    if (userRole !== 'admin') {
+      return { success: false, error: 'No tienes permisos de administrador para subir archivos.' };
     }
 
     const file = formData.get('file') as File;
     if (!file) {
-      return { success: false, error: 'No se subió ningún archivo' };
+      return { success: false, error: 'No se ha adjuntado ningún archivo.' };
     }
 
+    // Convertir el archivo cargado a Buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const workbook = XLSX.read(buffer, { type: 'buffer', raw: true });
+    // Leer el libro de trabajo Excel/CSV
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
 
-    const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    // Convertir la hoja a JSON
+    const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-    if (!rawData || rawData.length === 0) {
-      return { success: false, error: 'El archivo Excel/CSV está vacío' };
+    if (!rawRows || rawRows.length === 0) {
+      return { success: false, error: 'El archivo subido está vacío o no tiene el formato correcto.' };
     }
 
-    const productsMap = new Map<string, any>();
+    // Mapear y procesar cada fila del archivo
+    const formattedProducts: ProductRecord[] = rawRows
+      .map((row) => {
+        // Mapeo flexible para nombres de encabezados con/sin acentos o variantes
+        const referencia = String(row['Referencia'] || row['referencia'] || row['CODIGO'] || row['codigo'] || '').trim();
+        const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['descripcion'] || row['Descripción'] || '').trim();
+        const linea = String(row['Linea'] || row['LINEA'] || row['linea'] || row['Línea'] || '').trim();
+        const imagen = String(row['Imagen'] || row['IMAGEN'] || row['imagen'] || row['Url'] || '').trim();
 
-    rawData.forEach((row) => {
-      // Función simplificada y exacta para emparejar los encabezados de tu archivo
-      const getVal = (possibleKeys: string[]) => {
-        const rowKeys = Object.keys(row);
-        for (const key of possibleKeys) {
-          const foundKey = rowKeys.find((k) => {
-            const cleanK = k.trim().toLowerCase();
-            const cleanKey = key.trim().toLowerCase();
-            return cleanK === cleanKey || cleanK.includes(cleanKey);
-          });
-          if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null) {
-            return row[foundKey];
-          }
-        }
-        return null;
-      };
+        // Mapeo específico para la columna ESTADO COMPRA
+        const estadoCompraRaw = 
+          row['estado compra'] || 
+          row['ESTADO COMPRA'] || 
+          row['Estado Compra'] || 
+          row['estado_compra'] || 
+          row['ESTADO PARA ANALISIS DE COMPRAS'] || 
+          row['ESTADO PARA ANÁLISIS DE COMPRAS'] || 
+          'SI - SI SE ANALIZA PARA COMPRAS';
 
-      const referencia = String(getVal(['referencia', 'ref', 'codigo', 'item']) || '').trim();
-      
-      // Mapeo exacto para "Descripción" / "Descripcion"
-      const descripcion = String(
-        getVal(['descripción', 'descripcion', 'nombre', 'producto', 'articulo', 'detalle']) || ''
-      ).trim();
+        const estadoCompra = String(estadoCompraRaw).trim();
 
-      const linea = String(getVal(['linea', 'categoría', 'categoria', 'marca', 'grupo']) || 'GENERAL').trim();
+        // Conversión y limpieza de valores numéricos
+        const pvp1 = parseFloat(String(row['PVP1'] || row['pvp1'] || '0').replace(',', '.')) || 0;
+        const pvp3 = parseFloat(String(row['PVP3'] || row['pvp3'] || '0').replace(',', '.')) || 0;
+        const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || '0').replace(',', '.')) || 0;
+        const pvp5 = parseFloat(String(row['PVP5'] || row['pvp5'] || '0').replace(',', '.')) || 0;
+        const pvp6 = parseFloat(String(row['PVP6'] || row['pvp6'] || '0').replace(',', '.')) || 0;
 
-      const parseNum = (val: any) => {
-        if (typeof val === 'number') return val;
-        if (!val) return 0;
-        const cleaned = String(val).replace(/[^0-9.,-]/g, '').replace(',', '.');
-        const num = parseFloat(cleaned);
-        return isNaN(num) ? 0 : num;
-      };
+        const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['existencia'] || row['Stock'] || '0'), 10) || 0;
 
-      const pvp1 = parseNum(getVal(['pvp1', 'precio1', 'precio_1', 'pvp', 'precio']));
-      const pvp3 = parseNum(getVal(['pvp3', 'precio3', 'precio_3']));
-      const pvp4 = parseNum(getVal(['pvp4', 'precio4', 'precio_4']));
-      const pvp5 = parseNum(getVal(['pvp5', 'precio5', 'precio_5']));
-      const pvp6 = parseNum(getVal(['pvp6', 'precio6', 'precio_6']));
-      const existencia = Math.floor(parseNum(getVal(['existencia', 'stock', 'cantidad', 'inv', 'saldo'])));
-      
-      // Mapeo para la columna "Imagen" o "#N/A"
-      let rawImg = String(getVal(['imagen', 'imagen_url', 'foto', 'url', 'link']) || '').trim();
-      if (rawImg.includes('#N/A') || rawImg.includes('N/A')) {
-        rawImg = '';
-      }
-      const imagen_url = rawImg;
-
-      if (referencia) {
-        productsMap.set(referencia, {
+        return {
           referencia,
-          descripcion: descripcion || referencia,
-          linea: linea || 'GENERAL',
+          descripcion,
+          linea,
           pvp1,
           pvp3,
           pvp4,
           pvp5,
           pvp6,
           existencia,
-          imagen_url,
-        });
-      }
-    });
+          imagen,
+          estado_compra: estadoCompra,
+        };
+      })
+      // Omitir filas que no tengan referencia válida
+      .filter((p) => p.referencia !== '');
 
-    const productsToUpsert = Array.from(productsMap.values());
-
-    if (productsToUpsert.length === 0) {
-      return { 
-        success: false, 
-        error: 'No se encontraron columnas válidas de Referencia en el archivo.' 
-      };
+    if (formattedProducts.length === 0) {
+      return { success: false, error: 'No se encontraron filas con el campo "Referencia" válido.' };
     }
 
+    // Insertar/Actualizar en Supabase en bloques (chunks) para evitar límites de payload
     const chunkSize = 500;
-    for (let i = 0; i < productsToUpsert.length; i += chunkSize) {
-      const chunk = productsToUpsert.slice(i, i + chunkSize);
-      const { error: upsertError } = await supabase
+    let totalInserted = 0;
+
+    for (let i = 0; i < formattedProducts.length; i += chunkSize) {
+      const chunk = formattedProducts.slice(i, i + chunkSize);
+
+      const { error } = await supabase
         .from('products')
         .upsert(chunk, { onConflict: 'referencia' });
 
-      if (upsertError) {
-        return { success: false, error: `Error en Supabase: ${upsertError.message}` };
+      if (error) {
+        console.error('Error al insertar en Supabase:', error);
+        return { success: false, error: `Error en la base de datos: ${error.message}` };
       }
+
+      totalInserted += chunk.length;
     }
 
-    return { success: true, count: productsToUpsert.length };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Error inesperado procesando el catálogo' };
+    return {
+      success: true,
+      count: totalInserted,
+      message: `Catálogo actualizado exitosamente. (${totalInserted} productos procesados)`,
+    };
+
+  } catch (error: any) {
+    console.error('Error al procesar el archivo:', error);
+    return {
+      success: false,
+      error: error.message || 'Ocurrió un error inesperado al procesar el archivo.',
+    };
   }
 }
