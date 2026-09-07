@@ -18,7 +18,6 @@ export interface ProductRecord {
   pvp5: number;
   pvp6: number;
   existencia: number;
-  imagen?: string;
   estado_compra?: string;
   [key: string]: any;
 }
@@ -56,11 +55,10 @@ export async function processAndUploadCatalog(formData: FormData) {
     // Mapear y procesar cada fila del archivo
     const formattedProducts: ProductRecord[] = rawRows
       .map((row) => {
-        // Mapeo flexible para nombres de encabezados con/sin acentos o variantes
+        // Mapeo flexible para nombres de encabezados
         const referencia = String(row['Referencia'] || row['referencia'] || row['CODIGO'] || row['codigo'] || '').trim();
         const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['descripcion'] || row['Descripción'] || '').trim();
         const linea = String(row['Linea'] || row['LINEA'] || row['linea'] || row['Línea'] || '').trim();
-        const imagen = String(row['Imagen'] || row['IMAGEN'] || row['imagen'] || row['Url'] || '').trim();
 
         // Mapeo específico para la columna ESTADO COMPRA
         const estadoCompraRaw = 
@@ -93,18 +91,17 @@ export async function processAndUploadCatalog(formData: FormData) {
           pvp5,
           pvp6,
           existencia,
-          imagen,
           estado_compra: estadoCompra,
         };
       })
-      // Omitir filas que no tengan referencia válida
+      // Omitir filas sin referencia válida
       .filter((p) => p.referencia !== '');
 
     if (formattedProducts.length === 0) {
       return { success: false, error: 'No se encontraron filas con el campo "Referencia" válido.' };
     }
 
-    // Insertar/Actualizar en Supabase en bloques (chunks) para evitar límites de payload
+    // Insertar/Actualizar en Supabase en bloques (chunks)
     const chunkSize = 500;
     let totalInserted = 0;
 
