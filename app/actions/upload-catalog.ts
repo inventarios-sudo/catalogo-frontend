@@ -18,35 +18,31 @@ export interface ProductRecord {
   pvp5: number;
   pvp6: number;
   existencia: number;
+  imagen?: string;
   estado_compra?: string;
-  [key: string]: any;
 }
 
-// Sanitizar codificación de textos
-function fixEncoding(text: string): string {
-  if (!text) return '';
-  return text
+function sanitizeText(val: any): string {
+  if (val === null || val === undefined) return '';
+  return String(val)
     .replace(/NIÃ'A/g, 'NIÑA')
     .replace(/NIÑ'A/g, 'NIÑA')
     .replace(/COMPAÃIA/g, 'COMPAÑIA')
-    .replace(/COMPAÑIA/g, 'COMPAÑIA')
     .replace(/\uFFFD/g, 'Ñ')
     .trim();
 }
 
-function esInvalidoParaLinea(val: string): boolean {
-  if (!val) return true;
-  const clean = val.trim();
-  if (!isNaN(Number(clean))) return true;
-  if (/^[\d.,\s]+$/.test(clean)) return true;
-  return false;
+function parseNum(v: any): number {
+  if (!v) return 0;
+  const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
 }
 
 export async function processAndUploadCatalog(formData: FormData) {
   try {
     const userRole = formData.get('user') as string;
     if (userRole !== 'admin') {
-      return { success: false, error: 'No tienes permisos de administrador para realizar esta acción.' };
+      return { success: false, error: 'No tienes permisos de administrador.' };
     }
 
     const file = formData.get('file') as File;
@@ -61,42 +57,55 @@ export async function processAndUploadCatalog(formData: FormData) {
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
 
-    const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-    if (!rawRows || rawRows.length === 0) {
-      return { success: false, error: 'El archivo Excel no contiene datos.' };
+    // Leer como matriz/arreglo (filas con celdas por posición)
+    const rawMatrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (!rawMatrix || rawMatrix.length === 0) {
+      return { success: false, error: 'El archivo Excel está vacío.' };
     }
 
     const uniqueProductsMap = new Map<string, ProductRecord>();
 
-    rawRows.forEach((row) => {
-      const referencia = fixEncoding(String(row['Referencia'] || row['referencia'] || row['A'] || '')).trim();
-      if (!referencia || referencia.toUpperCase() === 'REFERENCIA') return;
+    for (let rowIndex = 0; rowIndex < rawMatrix.length; rowIndex++) {
+      const row = rawMatrix[rowIndex];
+      if (!row || row.length === 0) continue;
 
-      const descripcion = fixEncoding(String(row['Descripcion'] || row['DESCRIPCION'] || row['Descripción'] || row['B'] || ''));
+      const col0 = sanitizeText(row[0]);
+      if (!col0 || col0.toUpperCase() === 'REFERENCIA' || col0.toUpperCase() === 'REF') {
+        continue; // Ignorar cabeceras
+      }
 
-      let lineaRaw = fixEncoding(String(
-        row['Linea'] || row['LINEA'] || row['Línea'] || row['LÍNEA'] || row['Proveedor'] || row['PROVEEDOR'] || row['D'] || ''
-      ));
+      const referencia = col0;
+      const descripcion = sanitizeText(row[1]);
 
-      if (esInvalidoParaLinea(lineaRaw)) {
+      // Detectar dinámicamente si la columna 2 es Unidad (UND) o Línea
+      let lineaIndex = 2;
+      if (sanitizeText(row[2]).toUpperCase() === 'UND' || sanitizeText(row[2]).length <= 3) {
+        lineaIndex = 3; // Hay columna de Unidad, por lo que Línea está en la celda 3
+      }
+
+      let lineaRaw = sanitizeText(row[lineaIndex]);
+      if (!lineaRaw || !isNaN(Number(lineaRaw)) || /^[\d.,\s]+$/.test(lineaRaw)) {
         lineaRaw = 'SIN LÍNEA';
       }
 
-      const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['E'] || '0').replace(',', '.'), 10) || 0;
+      const existencia = parseInt(String(row[lineaIndex + 1] || '0').replace(',', '.'), 10) || 0;
+      const pvp1 = parseNum(row[lineaIndex + 2]);
+      const pvp3 = parseNum(row[lineaIndex + 3]);
+      const pvp4 = parseNum(row[lineaIndex + 4]);
+      const pvp5 = parseNum(row[lineaIndex + 5]);
+      const pvp6 = parseNum(row[lineaIndex + 6]);
 
-      const parseNum = (v: any) => {
-        if (!v) return 0;
-        const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
-        return isNaN(n) ? 0 : n;
-      };
+      // Buscar URL de imagen de Google Drive en las siguientes columnas
+      let imagenUrl = '';
+      for (let i = lineaIndex + 7; i < row.length; i++) {
+        const val = sanitizeText(row[i]);
+        if (val.includes('http://') || val.includes('https://') || val.includes('drive.google')) {
+          imagenUrl = val;
+          break;
+        }
+      }
 
-      const pvp1 = parseNum(row['PVP1'] || row['pvp1'] || row['F']);
-      const pvp3 = parseNum(row['PVP3'] || row['pvp3'] || row['G']);
-      const pvp4 = parseNum(row['PVP4'] || row['pvp4'] || row['H']);
-      const pvp5 = parseNum(row['PVP5'] || row['pvp5'] || row['I']);
-      const pvp6 = parseNum(row['PVP6'] || row['pvp6'] || row['J']);
-
-      const estadoCompra = fixEncoding(String(row['estado compra'] || row['ESTADO COMPRA'] || row['L'] || 'SI - SI SE ANALIZA PARA COMPRAS'));
+      const estadoCompra = sanitizeText(row[row.length - 1] || 'SI - SI SE ANALIZA PARA COMPRAS');
 
       uniqueProductsMap.set(referencia, {
         referencia,
@@ -108,9 +117,10 @@ export async function processAndUploadCatalog(formData: FormData) {
         pvp5,
         pvp6,
         existencia,
+        imagen: imagenUrl,
         estado_compra: estadoCompra,
       });
-    });
+    }
 
     const formattedProducts = Array.from(uniqueProductsMap.values());
     const chunkSize = 500;
@@ -131,9 +141,9 @@ export async function processAndUploadCatalog(formData: FormData) {
     return {
       success: true,
       count: totalInserted,
-      message: `Catálogo actualizado exitosamente. (${totalInserted} productos procesados)`,
+      message: `Catálogo actualizado con éxito. (${totalInserted} productos procesados)`,
     };
   } catch (error: any) {
-    return { success: false, error: error.message || 'Error inesperado al procesar el archivo.' };
+    return { success: false, error: error.message || 'Error al procesar el archivo.' };
   }
 }
