@@ -51,7 +51,6 @@ export default function CatalogPage() {
     }
   };
 
-  // Función corregida para cargar TODOS los productos en lotes (superando el límite de 1000 de Supabase)
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -67,7 +66,7 @@ export default function CatalogPage() {
           .range(from, from + step - 1);
 
         if (error) {
-          console.error('Error al obtener productos:', error);
+          console.error('Error al traer productos:', error);
           break;
         }
 
@@ -132,7 +131,7 @@ export default function CatalogPage() {
     const result = await processAndUploadCatalog(formData);
 
     if (result.success) {
-      setUploadMessage(`¡Éxito! ${result.message}`);
+      setUploadMessage(result.message);
       await fetchProducts();
     } else {
       setUploadMessage(`Error: ${result.error}`);
@@ -185,6 +184,7 @@ export default function CatalogPage() {
   return (
     <div className="min-h-screen bg-[#f1f3f6] p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
+        {/* Panel de Administración */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-slate-400">⚙️</span>
@@ -202,9 +202,9 @@ export default function CatalogPage() {
             <button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-xs hover:bg-blue-700 disabled:opacity-50 transition"
+              className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-xs hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-1"
             >
-              {isUploading ? 'Procesando...' : 'Actualizar Catálogo'}
+              🚀 {isUploading ? 'Procesando...' : 'Actualizar Catálogo'}
             </button>
           </form>
           {uploadMessage && (
@@ -214,13 +214,22 @@ export default function CatalogPage() {
           )}
         </div>
 
+        {/* Encabezado del Catálogo (Estructura idéntica a la Imagen 2) */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-extrabold text-slate-900 leading-tight">Catálogo de Productos</h1>
-              <p className="text-xs text-slate-400 font-medium mt-0.5">
-                Mostrando: <span className="text-blue-600 font-bold">{filteredProducts.length}</span> de {products.length} productos cargados
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="text-3xl shrink-0">📦</div>
+              <div>
+                <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">Catálogo de Productos</h1>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-xs text-slate-400 font-medium">
+                    Mostrando: <span className="text-blue-600 font-bold">{filteredProducts.length}</span> de {products.length} productos
+                  </p>
+                  <span className="bg-slate-100 text-slate-600 text-[11px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                    👤 Administrador
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
@@ -266,10 +275,32 @@ export default function CatalogPage() {
                 />
                 Ver Precios
               </label>
+
+              <button
+                onClick={() => alert('Generando código QR...')}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
+              >
+                <span>💵</span> Generar QR
+              </button>
+
+              <button
+                onClick={() => alert('Generando archivo PDF...')}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
+              >
+                <span>📄</span> PDF
+              </button>
+
+              <button
+                onClick={() => setIsAuthenticated(false)}
+                className="bg-[#1e293b] hover:bg-slate-900 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition"
+              >
+                <span>🚪</span> Salir
+              </button>
             </div>
           </div>
         </div>
 
+        {/* Rejilla de Productos */}
         {loading ? (
           <div className="text-center py-16 text-slate-400 font-medium">Cargando la totalidad del catálogo...</div>
         ) : (
@@ -290,12 +321,16 @@ export default function CatalogPage() {
                         alt={p.descripcion}
                         className="w-full h-full object-contain p-2"
                         onError={(e) => {
-                          (e.target as HTMLElement).parentElement!.innerHTML = `
-                            <div className="text-center p-4">
-                              <div className="w-8 h-8 mx-auto mb-1 opacity-40">🖼️</div>
-                              <span className="text-[11px] text-slate-400 font-medium">Sin Imagen</span>
-                            </div>
-                          `;
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          if (target.parentElement) {
+                            target.parentElement.innerHTML = `
+                              <div className="text-center p-4">
+                                <div className="text-2xl mb-1 opacity-50">🖼️</div>
+                                <span className="text-[11px] text-slate-400 font-medium">Sin Imagen</span>
+                              </div>
+                            `;
+                          }
                         }}
                       />
                     </div>
