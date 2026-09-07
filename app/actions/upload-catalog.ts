@@ -3,134 +3,129 @@
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 
-// Inicializar cliente de Supabase (usa las variables de entorno de tu proyecto)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-/**
- * Convierte un enlace de Google Drive en un enlace directo de imagen
- */
-function convertDriveUrl(url: string): string {
-  if (!url) return '';
-  const strUrl = url.toString().trim();
-  
-  // Buscar el ID en formatos tipo /d/ID/view o id=ID
-  const match = strUrl.match(/\/d\/([^\/]+)/) || strUrl.match(/id=([^&]+)/);
-  
-  if (match && match[1]) {
-    return `https://lh3.googleusercontent.com/d/${match[1]}`;
-  }
-  
-  return strUrl;
-}
-
-/**
- * Parsea un valor a número decimal/entero de forma segura
- */
-function parseNumber(val: any): number {
-  if (val === null || val === undefined) return 0;
-  if (typeof val === 'number') return isNaN(val) ? 0 : val;
-  const cleaned = val.toString().replace(/[^0-9.-]+/g, '');
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
-}
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 export async function processAndUploadCatalog(formData: FormData) {
   try {
-    const file = formData.get('file') as File;
+    const currentUser = (formData.get('user') as string || '').toLowerCase().trim();
 
-    if (!file) {
-      return { success: false, error: 'No se seleccionó ningún archivo.' };
+    if (currentUser !== 'admin') {
+      return { 
+        success: false, 
+        error: '⛔ Acceso denegado: Solo la cuenta Administrador tiene permisos para realizar cargas masivas.' 
+      };
     }
 
-    // Leer el archivo enviado como buffer
+    const file = formData.get('file') as File;
+    if (!file) {
+      return { success: false, error: 'No se subió ningún archivo' };
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Parsear el libro de Excel / CSV
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const firstSheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[firstSheetName];
+    const workbook = XLSX.read(buffer, { type: 'buffer', raw: true });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
 
-    // Convertir la hoja a objetos JSON
-    const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-    if (!rawRows || rawRows.length === 0) {
-      return { success: false, error: 'El archivo está vacío o no tiene un formato válido.' };
+    if (!rawData || rawData.length === 0) {
+      return { success: false, error: 'El archivo Excel/CSV está vacío' };
     }
 
-    // Mapeo y limpieza de datos
-    const productsToInsert = rawRows
-      .map((row) => {
-        // Normalizar los nombres de las columnas a minúsculas para evitar diferencias de mayúsculas
-        const normalizedRow: Record<string, any> = {};
-        Object.keys(row).forEach((key) => {
-          normalizedRow[key.trim().toLowerCase()] = row[key];
-        });
+    const productsMap = new Map<string, any>();
 
-        // Obtener la referencia
-        const referencia = (normalizedRow['referencia'] || '').toString().trim();
+    rawData.forEach((row) => {
+      // Función simplificada y exacta para emparejar los encabezados de tu archivo
+      const getVal = (possibleKeys: string[]) => {
+        const rowKeys = Object.keys(row);
+        for (const key of possibleKeys) {
+          const foundKey = rowKeys.find((k) => {
+            const cleanK = k.trim().toLowerCase();
+            const cleanKey = key.trim().toLowerCase();
+            return cleanK === cleanKey || cleanK.includes(cleanKey);
+          });
+          if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null) {
+            return row[foundKey];
+          }
+        }
+        return null;
+      };
 
-        // Ignorar filas que no tengan referencia
-        if (!referencia) return null;
+      const referencia = String(getVal(['referencia', 'ref', 'codigo', 'item']) || '').trim();
+      
+      // Mapeo exacto para "Descripción" / "Descripcion"
+      const descripcion = String(
+        getVal(['descripción', 'descripcion', 'nombre', 'producto', 'articulo', 'detalle']) || ''
+      ).trim();
 
-        // Procesar la URL de la imagen (Columna 'Imagen' o 'imagen')
-        const rawImageUrl = (normalizedRow['imagen'] || '').toString().trim();
-        const cleanImageUrl = convertDriveUrl(rawImageUrl);
+      const linea = String(getVal(['linea', 'categoría', 'categoria', 'marca', 'grupo']) || 'GENERAL').trim();
 
-        return {
-          referencia: referencia,
-          descripcion: (normalizedRow['descripcion'] || '').toString().trim(),
-          um_precio: (normalizedRow['u.m. precio'] || normalizedRow['u.m.precio'] || normalizedRow['um_precio'] || '').toString().trim(),
-          linea: (normalizedRow['linea'] || '').toString().trim(),
-          existencia: parseNumber(normalizedRow['existencia']),
-          pvp1: parseNumber(normalizedRow['pvp1']),
-          pvp3: parseNumber(normalizedRow['pvp3']),
-          pvp4: parseNumber(normalizedRow['pvp4']),
-          pvp5: parseNumber(normalizedRow['pvp5']),
-          pvp6: parseNumber(normalizedRow['pvp6']),
-          imagen: cleanImageUrl,
-          estado_compra: (normalizedRow['estado compra'] || normalizedRow['estado_compra'] || '').toString().trim(),
-        };
-      })
-      .filter((item) => item !== null); // Filtrar filas vacías
+      const parseNum = (val: any) => {
+        if (typeof val === 'number') return val;
+        if (!val) return 0;
+        const cleaned = String(val).replace(/[^0-9.,-]/g, '').replace(',', '.');
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? 0 : num;
+      };
 
-    if (productsToInsert.length === 0) {
-      return { success: false, error: 'No se encontraron datos válidos con la columna "Referencia".' };
-    }
-
-    // 1. Opcional: Limpiar o vaciar la tabla actual antes de insertar
-    // const { error: deleteError } = await supabase.from('products').delete().neq('referencia', '');
-    // if (deleteError) console.error('Error al limpiar la tabla:', deleteError);
-
-    // 2. Insertar/Actualizar en Supabase en bloques de 500 registros
-    const BATCH_SIZE = 500;
-    let totalInserted = 0;
-
-    for (let i = 0; i < productsToInsert.length; i += BATCH_SIZE) {
-      const batch = productsToInsert.slice(i, i + BATCH_SIZE);
-
-      const { error } = await supabase
-        .from('products')
-        .upsert(batch, { onConflict: 'referencia' }); // Utiliza 'referencia' como clave única
-
-      if (error) {
-        console.error(`Error en el lote ${i / BATCH_SIZE + 1}:`, error);
-        return { success: false, error: `Error guardando en base de datos: ${error.message}` };
+      const pvp1 = parseNum(getVal(['pvp1', 'precio1', 'precio_1', 'pvp', 'precio']));
+      const pvp3 = parseNum(getVal(['pvp3', 'precio3', 'precio_3']));
+      const pvp4 = parseNum(getVal(['pvp4', 'precio4', 'precio_4']));
+      const pvp5 = parseNum(getVal(['pvp5', 'precio5', 'precio_5']));
+      const pvp6 = parseNum(getVal(['pvp6', 'precio6', 'precio_6']));
+      const existencia = Math.floor(parseNum(getVal(['existencia', 'stock', 'cantidad', 'inv', 'saldo'])));
+      
+      // Mapeo para la columna "Imagen" o "#N/A"
+      let rawImg = String(getVal(['imagen', 'imagen_url', 'foto', 'url', 'link']) || '').trim();
+      if (rawImg.includes('#N/A') || rawImg.includes('N/A')) {
+        rawImg = '';
       }
+      const imagen_url = rawImg;
 
-      totalInserted += batch.length;
+      if (referencia) {
+        productsMap.set(referencia, {
+          referencia,
+          descripcion: descripcion || referencia,
+          linea: linea || 'GENERAL',
+          pvp1,
+          pvp3,
+          pvp4,
+          pvp5,
+          pvp6,
+          existencia,
+          imagen_url,
+        });
+      }
+    });
+
+    const productsToUpsert = Array.from(productsMap.values());
+
+    if (productsToUpsert.length === 0) {
+      return { 
+        success: false, 
+        error: 'No se encontraron columnas válidas de Referencia en el archivo.' 
+      };
     }
 
-    return {
-      success: true,
-      message: `¡Éxito! Se actualizaron ${totalInserted} productos.`,
-      count: totalInserted,
-    };
-  } catch (error: any) {
-    console.error('Error en processAndUploadCatalog:', error);
-    return { success: false, error: error?.message || 'Error interno al procesar el archivo.' };
+    const chunkSize = 500;
+    for (let i = 0; i < productsToUpsert.length; i += chunkSize) {
+      const chunk = productsToUpsert.slice(i, i + chunkSize);
+      const { error: upsertError } = await supabase
+        .from('products')
+        .upsert(chunk, { onConflict: 'referencia' });
+
+      if (upsertError) {
+        return { success: false, error: `Error en Supabase: ${upsertError.message}` };
+      }
+    }
+
+    return { success: true, count: productsToUpsert.length };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Error inesperado procesando el catálogo' };
   }
 }
