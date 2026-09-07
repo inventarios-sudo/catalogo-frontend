@@ -42,7 +42,7 @@ export async function processAndUploadCatalog(formData: FormData) {
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
 
-    // Convertir la hoja leyendo tanto por nombre de columna como por posición
+    // Convertir hoja a JSON
     const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
     if (!rawRows || rawRows.length === 0) {
@@ -54,16 +54,16 @@ export async function processAndUploadCatalog(formData: FormData) {
     rawRows.forEach((row) => {
       // 1. REFERENCIA (Columna A)
       const referencia = String(row['Referencia'] || row['referencia'] || row['A'] || '').trim();
-      if (!referencia || referencia.toUpperCase() === 'REFERENCIA') return; // Omite encabezados redundantes
+      if (!referencia || referencia.toUpperCase() === 'REFERENCIA') return;
 
       // 2. DESCRIPCIÓN (Columna B)
       const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['Descripción'] || row['B'] || '').trim();
 
-      // 3. LÍNEA (Columna D exacta)
-      let lineaRaw = String(row['Linea'] || row['LINEA'] || row['Línea'] || row['D'] || 'SIN LÍNEA').trim();
-      
-      // Si por alguna razón la línea leída es un precio/número, forzamos 'SIN LÍNEA'
-      if (!isNaN(Number(lineaRaw)) || /^[\d.,]+$/.test(lineaRaw)) {
+      // 3. LÍNEA / PROVEEDOR (Columna D)
+      let lineaRaw = String(row['Linea'] || row['LINEA'] || row['Línea'] || row['D'] || '').trim();
+
+      // Validación estricta: Si es número/decimal/precio o está vacío, asignar 'SIN LÍNEA'
+      if (!lineaRaw || !isNaN(Number(lineaRaw)) || /^[\d.,]+$/.test(lineaRaw)) {
         lineaRaw = 'SIN LÍNEA';
       }
 
@@ -73,9 +73,9 @@ export async function processAndUploadCatalog(formData: FormData) {
       // 5. PRECIOS (Columnas F, G, H, I, J)
       const pvp1 = parseFloat(String(row['PVP1'] || row['pvp1'] || row['F'] || '0').replace(',', '.')) || 0;
       const pvp3 = parseFloat(String(row['PVP3'] || row['pvp3'] || row['G'] || '0').replace(',', '.')) || 0;
-      const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || '0').replace(',', '.')) || 0;
-      const pvp5 = parseFloat(String(row['PVP5'] || row['pvp5'] || '0').replace(',', '.')) || 0;
-      const pvp6 = parseFloat(String(row['PVP6'] || row['pvp6'] || '0').replace(',', '.')) || 0;
+      const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || row['H'] || '0').replace(',', '.')) || 0;
+      const pvp5 = parseFloat(String(row['PVP5'] || row['pvp5'] || row['I'] || '0').replace(',', '.')) || 0;
+      const pvp6 = parseFloat(String(row['PVP6'] || row['pvp6'] || row['J'] || '0').replace(',', '.')) || 0;
 
       // 6. ESTADO COMPRA (Columna L)
       const estadoCompraRaw = 
@@ -88,7 +88,6 @@ export async function processAndUploadCatalog(formData: FormData) {
 
       const estadoCompra = String(estadoCompraRaw).trim();
 
-      // Guardar único por referencia
       uniqueProductsMap.set(referencia, {
         referencia,
         descripcion,
@@ -109,7 +108,7 @@ export async function processAndUploadCatalog(formData: FormData) {
       return { success: false, error: 'No se encontraron filas con el campo "Referencia" válido.' };
     }
 
-    // Subir a Supabase en bloques
+    // Subida en bloques a Supabase
     const chunkSize = 500;
     let totalInserted = 0;
 
