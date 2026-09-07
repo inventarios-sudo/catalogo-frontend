@@ -1,42 +1,15 @@
 'use client';
 
-import { useState, useEffect, Suspense, useTransition } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { processAndUploadCatalog } from '@/app/actions/upload-catalog';
 
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const USUARIOS_PERMITIDOS: Record<string, string> = {
-  admin: '123456',
-  'ernesto punina': 'ernesto.punina',
-  'ronald castro': 'ronald.castro',
-  'franklin guaman': 'franklin.guaman',
-  'marina flores': 'marina.flores',
-  'hector morales': 'hector.morales',
-  'pablo llumiquinga': 'pablo.llumiquinga',
-  'cristian martinez': 'cristian.martinez',
-  'alexander baquero': 'alexander.baquero',
-  'gabriela flores': 'gabriela.flores',
-  'gabrielaflores': 'gabriela.flores',
-  'madeleine vizcaino': 'madeleine.vizcaino',
-  'ernesto.punina': 'ernesto.punina',
-  'ronald.castro': 'ronald.castro',
-  'franklin.guaman': 'franklin.guaman',
-  'marina.flores': 'marina.flores',
-  'hector.morales': 'hector.morales',
-  'pablo.llumiquinga': 'pablo.llumiquinga',
-  'cristian.martinez': 'cristian.martinez',
-  'alexander.baquero': 'alexander.baquero',
-  'gabriela.flores': 'gabriela.flores',
-  'madeleine.vizcaino': 'madeleine.vizcaino',
-};
-
 interface Product {
-  id: number;
+  id?: string;
   referencia: string;
   descripcion: string;
   linea: string;
@@ -46,393 +19,563 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
-  imagen_url: string;
+  [key: string]: any;
 }
 
-function getCleanImageUrl(url: string | null | undefined): string {
-  if (!url || typeof url !== 'string' || !url.trim()) return '';
-  const clean = url.trim();
-  if (clean.includes('drive.google.com')) {
-    const match = clean.match(/\/d\/([a-zA-Z0-9_-]+)/) || clean.match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      return `https://lh3.googleusercontent.com/d/${match[1]}=s1000`;
+const USERS_DATABASE: Record<string, { pass: string; role: string; name: string }> = {
+  'admin': { pass: '123456', role: 'admin', name: 'Administrador' },
+  'ernesto punina': { pass: 'ernesto.punina', role: 'vendedor', name: 'Ernesto Punina' },
+  'ronald castro': { pass: 'ronald.castro', role: 'vendedor', name: 'Ronald Castro' },
+  'franklin guaman': { pass: 'franklin.guaman', role: 'vendedor', name: 'Franklin Guaman' },
+  'marina flores': { pass: 'marina.flores', role: 'vendedor', name: 'Marina Flores' },
+  'hector morales': { pass: 'hector.morales', role: 'vendedor', name: 'Hector Morales' },
+  'pablo llumiquinga': { pass: 'pablo.llumiquinga', role: 'vendedor', name: 'Pablo Llumiquinga' },
+  'cristian martinez': { pass: 'cristian.martinez', role: 'vendedor', name: 'Cristian Martinez' },
+  'alexander baquero': { pass: 'alexander.baquero', role: 'vendedor', name: 'Alexander Baquero' },
+  'gabriela flores': { pass: 'gabriela.flores', role: 'vendedor', name: 'Gabriela Flores' },
+  'gabrielaflores': { pass: 'gabriela.flores', role: 'vendedor', name: 'Gabriela Flores' },
+  'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'vendedor', name: 'Madeleine Vizcaino' },
+};
+
+function resolveImageUrl(product: Product, bucketName: string): string[] {
+  let foundUrl = '';
+
+  for (const key of Object.keys(product)) {
+    const val = product[key];
+    if (typeof val === 'string' && val.trim().startsWith('http')) {
+      foundUrl = val.trim();
+      break;
     }
   }
-  return clean;
+
+  if (foundUrl.includes('drive.google.com') || foundUrl.includes('docs.google.com')) {
+    const match = foundUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || foundUrl.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      const fileId = match[1];
+      return [
+        `https://lh3.googleusercontent.com/d/${fileId}`,
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`,
+        `https://drive.google.com/uc?export=view&id=${fileId}`
+      ];
+    }
+  }
+
+  if (foundUrl) {
+    return [foundUrl];
+  }
+
+  const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
+  return [
+    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`,
+    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.png`,
+    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpeg`,
+    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.JPG`
+  ];
 }
 
-function CatalogoContent() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
-  const isPublicView = searchParams.get('mode') === 'view';
-
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<string>('');
-  const [usuarioInput, setUsuarioInput] = useState<string>('');
-  const [passwordInput, setPasswordInput] = useState<string>('');
-  const [authError, setAuthError] = useState<string>('');
-
-  const [products, setProducts] = useState<Product[]>([]);
-  const [lineas, setLineas] = useState<string[]>([]);
-  
-  const [selectedLinea, setSelectedLinea] = useState<string>(searchParams.get('linea') || 'TODAS');
-  const [search, setSearch] = useState<string>(searchParams.get('q') || '');
-  const [priceList, setPriceList] = useState<string>(searchParams.get('list') || 'pvp1');
-  const [showPrices, setShowPrices] = useState<boolean>(searchParams.get('prices') !== 'false');
-  
-  const [loading, setLoading] = useState<boolean>(true);
-  const [errorMsg, setErrorMsg] = useState<string>('');
-  
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [showQRModal, setShowQRModal] = useState<boolean>(false);
-  const [qrUrl, setQrUrl] = useState<string>('');
-
-  const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadMessage, setUploadMessage] = useState<string>('');
-  const [, startTransition] = useTransition();
+function ProductImage({ 
+  product, 
+  bucketName, 
+  onImageClick 
+}: { 
+  product: Product; 
+  bucketName: string;
+  onImageClick: (url: string) => void;
+}) {
+  const [candidateUrls, setCandidateUrls] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [hasError, setHasError] = useState<boolean>(false);
 
   useEffect(() => {
-    if (isPublicView) {
-      setIsAuthenticated(true);
-      fetchProducts();
+    const urls = resolveImageUrl(product, bucketName);
+    setCandidateUrls(urls);
+    setCurrentIndex(0);
+    setHasError(false);
+  }, [product, bucketName]);
+
+  const handleError = () => {
+    if (currentIndex + 1 < candidateUrls.length) {
+      setCurrentIndex((prev) => prev + 1);
     } else {
-      const logged = sessionStorage.getItem('catalogo_session_active');
-      const savedUser = sessionStorage.getItem('catalogo_user_name') || '';
-      if (logged === 'true') {
-        setIsAuthenticated(true);
-        setCurrentUser(savedUser);
+      setHasError(true);
+    }
+  };
+
+  const currentSrc = candidateUrls[currentIndex] || '';
+
+  if (hasError || !currentSrc) {
+    return (
+      <div className="text-center p-2">
+        <span className="text-2xl">🖼️</span>
+        <p className="text-[10px] font-semibold text-gray-400 mt-1">Sin Imagen</p>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={currentSrc}
+      alt={product.descripcion || product.referencia}
+      onError={handleError}
+      onClick={() => onImageClick(currentSrc)}
+      className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
+      referrerPolicy="no-referrer"
+      crossOrigin="anonymous"
+    />
+  );
+}
+
+export default function CatalogoPage() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isQRView, setIsQRView] = useState(false);
+
+  const [currentUserRole, setCurrentUserRole] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('');
+  const [usuarioInput, setUsuarioInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [lineas, setLineas] = useState<string[]>([]);
+  const [selectedLine, setSelectedLine] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const [bucketName] = useState('productos');
+
+  const [priceList, setPriceList] = useState<'pvp1' | 'pvp3' | 'pvp4' | 'pvp5' | 'pvp6'>('pvp1');
+  const [showPrices, setShowPrices] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Estado para el modal del QR
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrImageUrl, setQrImageUrl] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const isPublic = params.get('mode') === 'qr';
+
+      if (isPublic) {
+        setIsQRView(true);
+        const urlLine = params.get('linea');
+        const urlList = params.get('lista');
+        const urlPrices = params.get('precios');
+
+        if (urlLine) setSelectedLine(decodeURIComponent(urlLine));
+        if (urlList && ['pvp1', 'pvp3', 'pvp4', 'pvp5', 'pvp6'].includes(urlList)) {
+          setPriceList(urlList as any);
+        }
+        setShowPrices(urlPrices === '1' || urlPrices === 'true');
         fetchProducts();
       }
     }
-  }, [isPublicView]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setPreviewImage(null);
-        setShowQRModal(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  const updateQueryParams = (linea: string, query: string, visiblePrices: boolean, listPvp: string) => {
-    const params = new URLSearchParams();
-    if (isPublicView) params.set('mode', 'view');
-    if (linea && linea !== 'TODAS') params.set('linea', linea);
-    if (query && query.trim() !== '') params.set('q', query);
-    if (!visiblePrices) params.set('prices', 'false');
-    if (listPvp && listPvp !== 'pvp1') params.set('list', listPvp);
-    
-    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
-    router.replace(newUrl, { scroll: false });
-  };
-
-  const handleLineaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setSelectedLinea(val);
-    updateQueryParams(val, search, showPrices, priceList);
-  };
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSearch(val);
-    updateQueryParams(selectedLinea, val, showPrices, priceList);
-  };
-
-  const handlePricesToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const checked = e.target.checked;
-    setShowPrices(checked);
-    updateQueryParams(selectedLinea, search, checked, priceList);
-  };
-
-  const handlePriceListChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setPriceList(val);
-    updateQueryParams(selectedLinea, search, showPrices, val);
-  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const userClean = usuarioInput.toLowerCase().trim();
-    const passClean = passwordInput.trim();
+    const u = usuarioInput.trim().toLowerCase();
+    const p = passwordInput.trim();
+    const matchedUser = USERS_DATABASE[u];
 
-    if (USUARIOS_PERMITIDOS[userClean] && USUARIOS_PERMITIDOS[userClean] === passClean) {
-      sessionStorage.setItem('catalogo_session_active', 'true');
-      sessionStorage.setItem('catalogo_user_name', userClean);
+    if (matchedUser && matchedUser.pass === p) {
       setIsAuthenticated(true);
-      setCurrentUser(userClean);
-      setAuthError('');
-      fetchProducts();
+      setCurrentUserRole(matchedUser.role);
+      setCurrentUserName(matchedUser.name);
+      setLoginError('');
     } else {
-      setAuthError('❌ Usuario o contraseña incorrectos');
+      setLoginError('Usuario o contraseña incorrectos.');
     }
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('catalogo_session_active');
-    sessionStorage.removeItem('catalogo_user_name');
     setIsAuthenticated(false);
-    setCurrentUser('');
+    setCurrentUserRole('');
+    setCurrentUserName('');
     setUsuarioInput('');
     setPasswordInput('');
   };
 
   async function fetchProducts() {
     setLoading(true);
-    setErrorMsg('');
-    
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .range(0, 2999);
 
-      if (error) {
-        setErrorMsg(`Error [${error.code}]: ${error.message}`);
-      } else if (data) {
-        setProducts(data);
-        const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean);
-        setLineas(uniqueLineas as string[]);
+    try {
+      const { data, error } = await supabase.from('products').select('*').range(0, 2999);
+
+      if (!error && data) {
+        setProducts(data as Product[]);
+        const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean) as string[];
+        setLineas(uniqueLineas);
       }
-    } catch (err: any) {
-      setErrorMsg(`Excepción: ${err.message || 'Sin conexión al servidor'}`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   }
 
-  const handleUploadCatalog = () => {
-    if (currentUser !== 'admin') {
-      setUploadMessage('⛔ Solo la cuenta Administrador puede realizar cargas masivas.');
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProducts();
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    let result = products;
+
+    if (selectedLine) {
+      result = result.filter((p) => p.linea === selectedLine);
+    }
+
+    if (searchTerm.trim() !== '') {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (p) =>
+          (p.referencia && p.referencia.toLowerCase().includes(term)) ||
+          (p.descripcion && p.descripcion.toLowerCase().includes(term))
+      );
+    }
+
+    setFilteredProducts(result);
+  }, [searchTerm, selectedLine, products]);
+
+  const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (currentUserRole !== 'admin') {
+      alert('Solo el usuario Administrador puede realizar cargas masivas.');
       return;
     }
 
-    if (!file) {
-      setUploadMessage('⚠️ Por favor selecciona un archivo Excel (.xlsx, .xls) o .csv');
+    const form = e.currentTarget;
+    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+      setUploadStatus({ success: false, message: 'Selecciona un archivo Excel o CSV.' });
       return;
     }
 
-    setIsUploading(true);
-    setUploadMessage('⌛ Cargando y actualizando productos...');
+    setUploading(true);
+    setUploadStatus(null);
 
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('user', currentUser);
+    formData.append('file', fileInput.files[0]);
+    formData.append('user', currentUserRole);
 
-    startTransition(async () => {
-      const response = await processAndUploadCatalog(formData);
+    const res = await processAndUploadCatalog(formData);
+    setUploading(false);
 
-      if (response.success) {
-        setUploadMessage(`✅ ¡Éxito! Se actualizaron ${response.count} productos.`);
-        setFile(null);
-        fetchProducts();
-      } else {
-        setUploadMessage(`❌ Error: ${response.error}`);
-      }
-      setIsUploading(false);
-    });
+    if (res.success) {
+      setUploadStatus({ success: true, message: `¡Éxito! Se actualizaron ${res.count} productos.` });
+      fetchProducts();
+      form.reset();
+    } else {
+      setUploadStatus({ success: false, message: res.error || 'Ocurrió un error al procesar el archivo.' });
+    }
   };
 
-  const getPublicShareUrl = () => {
+  // Generación directa de la imagen del QR vía API sin fallos de paquetes
+  const handleGenerateQR = () => {
     const baseUrl = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
-    params.set('mode', 'view');
-    if (selectedLinea !== 'TODAS') params.set('linea', selectedLinea);
-    if (search.trim() !== '') params.set('q', search);
-    if (!showPrices) params.set('prices', 'false');
-    if (priceList !== 'pvp1') params.set('list', priceList);
-    
-    return `${baseUrl}?${params.toString()}`;
-  };
 
-  const handleGenerateQR = () => {
-    const shareUrl = getPublicShareUrl();
-    const qrImageApi = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}`;
-    setQrUrl(qrImageApi);
+    params.set('mode', 'qr');
+    if (selectedLine) {
+      params.set('linea', selectedLine);
+    }
+    params.set('lista', priceList);
+    params.set('precios', showPrices ? '1' : '0');
+
+    const finalUrl = `${baseUrl}?${params.toString()}`;
+    const apiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(finalUrl)}`;
+
+    setQrImageUrl(apiQrUrl);
     setShowQRModal(true);
   };
 
-  const handlePrintPDF = () => {
-    document.title = 'CATÁLOGO DE PRODUCTOS';
-    window.print();
-  };
-
-  const filteredProducts = products.filter((p) => {
-    const matchesLinea = selectedLinea === 'TODAS' || p.linea === selectedLinea;
-    const term = search.toLowerCase().trim();
-    
-    const matchesSearch =
-      !term ||
-      (p.descripcion && p.descripcion.toLowerCase().includes(term)) ||
-      (p.referencia && p.referencia.toLowerCase().includes(term));
-
-    return matchesLinea && matchesSearch;
-  });
-
-  const getSelectedPrice = (product: Product) => {
-    return product[priceList as keyof Product] ?? '0.00';
-  };
-
-  if (!isAuthenticated) {
+  // VISTA PÚBLICA / MODO QR PARA CLIENTES
+  if (isQRView) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden max-w-md w-full border border-gray-100">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-center text-white">
-            <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-sm text-3xl shadow-inner">
-              🔒
+      <div className="min-h-screen bg-[#f8fafc] p-4 md:p-6">
+        <div className="max-w-7xl mx-auto space-y-4">
+          <div className="bg-white rounded-2xl p-4 border border-gray-200/80 shadow-sm flex items-center justify-between">
+            <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-10 md:h-12 object-contain" />
+            <div className="text-right">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">CATÁLOGO</span>
+              <h1 className="text-sm md:text-base font-extrabold text-blue-600 uppercase">
+                {selectedLine ? `LÍNEA: ${selectedLine}` : 'TODAS LAS LÍNEAS'}
+              </h1>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight">Acceso al Catálogo</h2>
-            <p className="text-xs text-blue-100 mt-1">
-              Ingresa tus credenciales autorizadas para continuar
-            </p>
           </div>
 
-          <form onSubmit={handleLogin} className="p-6 sm:p-8 space-y-5">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                Usuario
-              </label>
-              <input
-                type="text"
-                value={usuarioInput}
-                onChange={(e) => setUsuarioInput(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 text-gray-900 text-sm"
-                required
+          {loading ? (
+            <div className="text-center py-20 text-gray-400 text-sm font-semibold">Cargando catálogo...</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {filteredProducts.map((p) => {
+                const price = p[priceList] || 0;
+
+                return (
+                  <div
+                    key={p.referencia}
+                    className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm"
+                  >
+                    <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2">
+                      <ProductImage
+                        product={p}
+                        bucketName={bucketName}
+                        onImageClick={(url) => setPreviewImage(url)}
+                      />
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold text-blue-600 uppercase mb-0.5">
+                          {p.linea}
+                        </div>
+
+                        <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
+                          {p.descripcion}
+                        </h3>
+
+                        <div className="text-[11px] text-gray-500 mb-3">
+                          Ref: <span className="font-mono font-bold text-gray-800">{p.referencia}</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-100 flex items-end justify-between">
+                        <div>
+                          {showPrices ? (
+                            <div className="text-sm font-extrabold text-green-600">
+                              ${typeof price === 'number' ? price.toFixed(2) : price}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-gray-400 italic">Sin Precio</div>
+                          )}
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
+                          <div className="text-xs font-bold text-red-600">
+                            {p.existencia} und
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {previewImage && (
+          <div
+            className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4"
+            onClick={() => setPreviewImage(null)}
+          >
+            <div className="relative max-w-2xl w-full bg-white rounded-2xl p-2 shadow-2xl">
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="absolute top-3 right-3 bg-gray-900 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+              >
+                ✕
+              </button>
+              <img 
+                src={previewImage} 
+                alt="Vista previa" 
+                className="w-full h-auto max-h-[80vh] object-contain rounded-xl"
+                referrerPolicy="no-referrer"
               />
             </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                Contraseña
-              </label>
-              <input
-                type="password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-600 text-gray-900 text-sm"
-                required
-              />
+  // LOGIN SI NO ESTÁ AUTENTICADO
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-b from-[#2563eb] to-[#4f46e5] pt-10 pb-8 px-6 text-center">
+            <div className="mx-auto w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
+              <span className="text-2xl">🔒</span>
             </div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Acceso al Catálogo</h1>
+            <p className="text-xs text-blue-100 mt-1">Ingresa tus credenciales autorizadas</p>
+          </div>
 
-            {authError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-medium text-center">
-                {authError}
+          <div className="p-8">
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">USUARIO</label>
+                <input
+                  type="text"
+                  value={usuarioInput}
+                  onChange={(e) => setUsuarioInput(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                  required
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition-all"
-            >
-              Iniciar Sesión
-            </button>
-          </form>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">CONTRASEÑA</label>
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                  required
+                />
+              </div>
+
+              {loginError && (
+                <div className="text-xs text-red-600 font-semibold bg-red-50 p-2.5 rounded-xl border border-red-200 text-center">
+                  {loginError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-[#1d63ed] hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl text-sm shadow-md"
+              >
+                Iniciar Sesión
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     );
   }
 
+  // VISTA PANEL VENDEDOR / ADMIN CON BOTÓN DE QR VISIBLE
   return (
-    <div className="min-h-screen bg-gray-100 p-2 sm:p-4 font-sans print:bg-white print:p-0">
+    <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6 print:bg-white print:p-0">
+      
       <style jsx global>{`
         @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; font-size: 10px; }
-          .page-break { page-break-inside: avoid; }
-          .grid-container {
-            display: grid !important;
-            grid-template-columns: repeat(3, 1fr) !important;
-            gap: 12px !important;
+          @page {
+            margin: 15mm 10mm 15mm 10mm;
+          }
+          body {
+            background-color: #ffffff !important;
+          }
+          .print-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            display: flex !important;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid #e2e8f0;
+            background-color: white;
+            z-index: 1000;
+          }
+          .print-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            border-top: 1px solid #e2e8f0;
+            background-color: white;
+            z-index: 1000;
+          }
+          .print-content-padding {
+            padding-top: 70px;
+            padding-bottom: 40px;
           }
         }
       `}</style>
 
-      {/* ENCABEZADO MODO CLIENTE (PÚBLICO) */}
-      {isPublicView && (
-        <div className="no-print max-w-7xl mx-auto bg-white p-4 rounded-2xl shadow-sm border border-gray-200 mb-4 text-center">
-          <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900">
-            📦 Catálogo de Productos
-          </h1>
-          {selectedLinea !== 'TODAS' && (
-            <p className="text-xs sm:text-sm text-blue-600 font-bold mt-1">
-              Línea: {selectedLinea}
-            </p>
-          )}
+      <div className="hidden print-header">
+        <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-12 object-contain" />
+        <div className="text-right">
+          <h2 className="text-base font-bold text-gray-900 tracking-tight">CATÁLOGO DE PRODUCTOS</h2>
+          <p className="text-[10px] text-gray-500 font-semibold uppercase">
+            Lista: {priceList.toUpperCase()} {selectedLine ? `| Línea: ${selectedLine}` : ''}
+          </p>
         </div>
-      )}
+      </div>
 
-      {/* PANEL DE CONTROL COMPLETO */}
-      {!isPublicView && (
-        <div className="no-print max-w-7xl mx-auto bg-white p-3 sm:p-5 rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6 flex flex-col gap-4">
-          
-          {/* PANEL DE ACTUALIZACIÓN MASIVA (SOLO VISIBLE PARA EL USUARIO ADMIN) */}
-          {currentUser === 'admin' && (
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <h2 className="text-xs sm:text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+      <div className="hidden print-footer">
+        <p className="text-xs font-bold text-gray-700 tracking-wider uppercase">
+          * PRECIOS NO INCLUYEN IVA *
+        </p>
+      </div>
+
+      <div className="max-w-7xl mx-auto space-y-4 print-content-padding">
+
+        <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-sm space-y-4 print:hidden">
+          {currentUserRole === 'admin' && (
+            <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-4">
+              <div className="text-slate-700 text-xs font-bold mb-2">
                 ⚙️ PANEL DE ADMINISTRACIÓN - Actualizar Catálogo Masivo
-              </h2>
-
-              <div className="flex flex-col sm:flex-row items-center gap-3">
+              </div>
+              
+              <form onSubmit={handleFileUpload} className="flex flex-wrap items-center gap-2">
                 <input
                   type="file"
                   accept=".xlsx, .xls, .csv"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  className="text-xs text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer w-full sm:w-auto"
+                  className="text-xs text-gray-600 border border-gray-200 rounded-lg p-1"
                 />
-
                 <button
-                  onClick={handleUploadCatalog}
-                  disabled={isUploading || !file}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all w-full sm:w-auto ${
-                    isUploading || !file ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow'
-                  }`}
+                  type="submit"
+                  disabled={uploading}
+                  className="bg-[#94a3b8] hover:bg-slate-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg"
                 >
-                  {isUploading ? '🚀 Actualizando...' : '🚀 Actualizar Catálogo'}
+                  🔖 {uploading ? 'Cargando...' : 'Actualizar Catálogo'}
                 </button>
-              </div>
+              </form>
 
-              {uploadMessage && (
-                <p className="text-xs mt-2 font-medium text-slate-700">
-                  {uploadMessage}
-                </p>
+              {uploadStatus && (
+                <div className="mt-2 text-xs text-emerald-700 font-semibold">
+                  ✅ {uploadStatus.message}
+                </div>
               )}
             </div>
           )}
 
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 flex items-center gap-2">
-                📦 Catálogo de Productos
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                Mostrando: <span className="font-bold text-blue-600">{filteredProducts.length}</span> de {products.length} productos
-                {currentUser && (
-                  <span className="ml-2 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                    👤 {currentUser}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
+            <div className="flex items-center space-x-3">
+              <span className="text-3xl">📦</span>
+              <div>
+                <h1 className="text-2xl font-extrabold text-gray-900 leading-none">
+                  Catálogo de Productos
+                </h1>
+                <div className="text-xs text-gray-500 font-medium mt-1 flex items-center gap-2">
+                  <span>Mostrando: <strong className="text-blue-600">{filteredProducts.length}</strong> de {products.length}</span>
+                  <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[11px]">
+                    👤 {currentUserName}
                   </span>
-                )}
-              </p>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 placeholder="Buscar por Ref o Nombre..."
-                value={search}
-                onChange={handleSearchChange}
-                className="w-full sm:w-auto border border-gray-300 bg-white text-gray-900 placeholder-gray-400 font-medium rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs w-48 shadow-sm"
               />
 
               <select
-                value={selectedLinea}
-                onChange={handleLineaChange}
-                className="w-full sm:w-auto border border-gray-300 text-gray-900 font-medium rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={selectedLine}
+                onChange={(e) => setSelectedLine(e.target.value)}
+                className="bg-white border border-gray-200 text-gray-800 rounded-xl px-3 py-2 text-xs shadow-sm font-semibold"
               >
-                <option value="TODAS">Todas las Líneas ({lineas.length})</option>
+                <option value="">Todas las Líneas ({lineas.length})</option>
                 {lineas.map((linea) => (
                   <option key={linea} value={linea}>
                     {linea}
@@ -442,8 +585,8 @@ function CatalogoContent() {
 
               <select
                 value={priceList}
-                onChange={handlePriceListChange}
-                className="w-full sm:w-auto border border-gray-300 rounded-xl px-3 py-2 text-sm bg-blue-50 text-blue-700 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setPriceList(e.target.value as any)}
+                className="bg-blue-50 border border-blue-200 text-blue-700 font-bold px-3 py-2 rounded-xl text-xs"
               >
                 <option value="pvp1">Lista PVP 1</option>
                 <option value="pvp3">Lista PVP 3</option>
@@ -452,236 +595,171 @@ function CatalogoContent() {
                 <option value="pvp6">Lista PVP 6</option>
               </select>
 
-              <label className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 cursor-pointer select-none">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 bg-gray-50 border border-gray-200 px-2.5 py-2 rounded-xl cursor-pointer">
                 <input
                   type="checkbox"
                   checked={showPrices}
-                  onChange={handlePricesToggle}
-                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  onChange={(e) => setShowPrices(e.target.checked)}
                 />
-                Ver Precios
+                <span>Ver Precios</span>
               </label>
 
+              {/* BOTÓN GENERAR QR */}
               <button
                 onClick={handleGenerateQR}
-                className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+                className="bg-[#0284c7] hover:bg-sky-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors flex items-center gap-1"
               >
-                📷 Generar QR
+                📱 Generar QR
               </button>
 
               <button
-                onClick={handlePrintPDF}
-                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
+                onClick={() => window.print()}
+                className="bg-[#ef4444] hover:bg-red-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors"
               >
-                📄 PDF
+                🚩 PDF
               </button>
 
               <button
                 onClick={handleLogout}
-                className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow transition-colors flex items-center justify-center gap-1.5"
+                className="bg-[#1e293b] text-white font-bold text-xs px-3.5 py-2 rounded-xl"
               >
                 🚪 Salir
               </button>
             </div>
           </div>
         </div>
-      )}
 
-      {errorMsg && (
-        <div className="no-print max-w-7xl mx-auto mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs sm:text-sm font-medium">
-          ⚠️ Diagnóstico: {errorMsg}
-        </div>
-      )}
+        {/* GRILLA DE PRODUCTOS */}
+        {!loading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3">
+            {filteredProducts.map((p) => {
+              const price = p[priceList] || 0;
 
-      {/* TARJETAS DE PRODUCTO */}
-      {loading ? (
-        <div className="text-center py-16 no-print">
-          <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent"></div>
-          <p className="mt-2 text-gray-600 text-sm font-medium">Cargando catálogo...</p>
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="text-center py-16 text-gray-500 text-sm font-medium no-print">
-          No se encontraron productos para esta búsqueda.
-        </div>
-      ) : (
-        <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 grid-container">
-          {filteredProducts.map((p) => {
-            const cleanUrl = getCleanImageUrl(p.imagen_url);
-            const price = getSelectedPrice(p);
-            const stockVal = p.existencia ?? 0;
-
-            return (
-              <div
-                key={p.id}
-                className="page-break bg-white border border-gray-200 rounded-xl p-2.5 sm:p-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div>
-                  <div 
-                    onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
-                    className={`w-full h-32 sm:h-40 bg-gray-100 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center relative ${
-                      cleanUrl ? 'cursor-zoom-in group' : ''
-                    }`}
-                  >
-                    {cleanUrl ? (
-                      <>
-                        <img
-                          src={cleanUrl}
-                          alt={p.descripcion || 'Producto'}
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                            const parent = (e.target as HTMLElement).parentElement;
-                            if (parent) {
-                              const fallback = document.createElement('div');
-                              fallback.className = 'text-center text-gray-400';
-                              fallback.innerHTML = '<span class="text-2xl block mb-0.5">🖼️</span><span class="text-[10px] font-medium">Sin Imagen</span>';
-                              parent.appendChild(fallback);
-                            }
-                          }}
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
-                          loading="lazy"
-                        />
-                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <span className="bg-black/60 text-white text-[10px] px-2 py-1 rounded-full font-medium">🔍 Ampliar</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-center text-gray-400">
-                        <span className="text-2xl block mb-0.5">🖼️</span>
-                        <span className="text-[10px] font-medium">Sin Imagen</span>
-                      </div>
-                    )}
+              return (
+                <div
+                  key={p.referencia}
+                  className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid print:shadow-none print:border-gray-300"
+                >
+                  <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2 print:bg-white">
+                    <ProductImage
+                      product={p}
+                      bucketName={bucketName}
+                      onImageClick={(url) => setPreviewImage(url)}
+                    />
                   </div>
 
-                  <div className="text-[9px] sm:text-[10px] font-bold text-blue-600 uppercase tracking-wide truncate mb-0.5">
-                    {p.linea}
-                  </div>
-
-                  <h3 
-                    onClick={() => cleanUrl && setPreviewImage(cleanUrl)}
-                    className={`text-[11px] sm:text-xs font-bold text-gray-900 line-clamp-2 leading-tight uppercase mb-1 transition-colors ${
-                      cleanUrl ? 'cursor-pointer hover:text-blue-600' : ''
-                    }`}
-                  >
-                    {p.descripcion}
-                  </h3>
-
-                  <div className="text-[10px] sm:text-[11px] text-gray-600 mb-2">
-                    Ref: <span className="font-mono font-bold text-gray-900">{p.referencia}</span>
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-100 pt-1.5 sm:pt-2 flex items-center justify-between mt-auto">
-                  {showPrices ? (
+                  <div className="flex-1 flex flex-col justify-between">
                     <div>
-                      <div className="text-[8px] sm:text-[9px] text-gray-400 uppercase font-bold">
-                        Precio ({priceList.toUpperCase()})
+                      <div className="text-[10px] font-bold text-blue-600 uppercase mb-0.5">
+                        {p.linea}
                       </div>
-                      <div className="text-xs sm:text-sm font-extrabold text-green-600">
-                        ${typeof price === 'number' ? price.toFixed(2) : price}
+
+                      <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
+                        {p.descripcion}
+                      </h3>
+
+                      <div className="text-[11px] text-gray-500 mb-3">
+                        Ref: <span className="font-mono font-bold text-gray-800">{p.referencia}</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="text-[9px] sm:text-[10px] text-gray-400 italic">Sin Precio</div>
-                  )}
 
-                  <div className="text-right">
-                    <div className="text-[8px] sm:text-[9px] text-gray-400 uppercase font-bold">Stock</div>
-                    <div className={`text-[11px] sm:text-xs font-bold ${stockVal > 0 ? 'text-gray-900' : 'text-red-500'}`}>
-                      {stockVal} und
+                    <div className="pt-2 border-t border-gray-100 flex items-end justify-between">
+                      <div>
+                        {showPrices ? (
+                          <div className="text-sm font-extrabold text-green-600">
+                            ${typeof price === 'number' ? price.toFixed(2) : price}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-gray-400 italic">Sin Precio</div>
+                        )}
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
+                        <div className="text-xs font-bold text-red-600">
+                          {p.existencia} und
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* MODAL CÓDIGO QR */}
       {showQRModal && (
-        <div 
-          className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 no-print"
+        <div
+          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
           onClick={() => setShowQRModal(false)}
         >
-          <div 
-            className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl relative"
+          <div
+            className="bg-white rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl relative space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setShowQRModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 font-bold text-xl w-8 h-8 rounded-full flex items-center justify-center bg-gray-100"
+              className="absolute top-4 right-4 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
             >
               ✕
             </button>
 
-            <h3 className="text-lg font-extrabold text-gray-900 mb-1">
-              📷 Escanea el Código QR
-            </h3>
-            
-            <div className="text-xs text-gray-500 mb-4 space-y-1">
-              <p>Línea seleccionada: <span className="font-bold text-purple-600">{selectedLinea}</span></p>
-              <p>Precios visibles: <span className={`font-bold ${showPrices ? 'text-green-600' : 'text-red-500'}`}>{showPrices ? 'SÍ' : 'NO'}</span></p>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Código QR Generado</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Al escanear, el cliente verá únicamente la línea y opción configurada.
+              </p>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 inline-block mb-4">
-              {qrUrl ? (
-                <img src={qrUrl} alt="Código QR Catálogo" className="w-56 h-56 mx-auto rounded-lg shadow-sm" />
-              ) : (
-                <div className="w-56 h-56 flex items-center justify-center text-gray-400">Generando QR...</div>
-              )}
+            <div className="bg-gray-50 p-4 rounded-2xl flex items-center justify-center border border-gray-100">
+              <img src={qrImageUrl} alt="Código QR" className="w-48 h-48 rounded-lg" />
             </div>
 
-            <p className="text-xs text-gray-600 mb-4">
-              Al escanear este código se abrirá el catálogo en modo lectura respetando tu configuración de precios.
-            </p>
+            <div className="text-left bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 space-y-1">
+              <div><strong>Línea:</strong> {selectedLine || 'Todas las Líneas'}</div>
+              <div><strong>Lista:</strong> {priceList.toUpperCase()}</div>
+              <div>
+                <strong>Ver Precios:</strong>{' '}
+                <span className={showPrices ? 'text-green-700 font-bold' : 'text-red-600 font-bold'}>
+                  {showPrices ? 'SÍ' : 'NO'}
+                </span>
+              </div>
+            </div>
 
             <button
-              onClick={() => {
-                const a = document.createElement('a');
-                a.href = qrUrl;
-                a.download = `QR_Catalogo_${selectedLinea}.png`;
-                a.click();
-              }}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-xl text-xs sm:text-sm shadow transition-all"
+              onClick={() => setShowQRModal(false)}
+              className="w-full bg-[#0284c7] hover:bg-sky-700 text-white font-bold py-2.5 rounded-xl text-xs"
             >
-              ⬇️ Descargar Imagen QR
+              Cerrar
             </button>
           </div>
         </div>
       )}
 
-      {/* MODAL AMPLIFICAR IMAGEN */}
+      {/* MODAL VISTA PREVIA IMAGEN */}
       {previewImage && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.95)' }}
-          className="no-print flex items-center justify-center p-4 cursor-zoom-out backdrop-blur-md"
+          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
           onClick={() => setPreviewImage(null)}
         >
-          <button
-            onClick={() => setPreviewImage(null)}
-            style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 100000 }}
-            className="bg-white/20 hover:bg-white/40 text-white rounded-full w-12 h-12 flex items-center justify-center text-2xl font-bold shadow-xl backdrop-blur-sm transition-all active:scale-90"
-          >
-            ✕
-          </button>
-
-          <img
-            src={previewImage}
-            alt="Imagen ampliada"
-            style={{ maxHeight: '92vh', maxWidth: '92vw', objectFit: 'contain' }}
-            className="rounded-lg shadow-2xl transition-all duration-300 transform scale-100 select-none"
-            onClick={(e) => e.stopPropagation()}
-          />
+          <div className="relative max-w-2xl w-full bg-white rounded-2xl p-2 shadow-2xl">
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-3 right-3 bg-gray-900 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
+            >
+              ✕
+            </button>
+            <img 
+              src={previewImage} 
+              alt="Vista previa" 
+              className="w-full h-auto max-h-[80vh] object-contain rounded-xl"
+              referrerPolicy="no-referrer"
+            />
+          </div>
         </div>
       )}
     </div>
-  );
-}
-
-export default function CatalogoPage() {
-  return (
-    <Suspense fallback={<div className="text-center py-16">Cargando aplicación...</div>}>
-      <CatalogoContent />
-    </Suspense>
   );
 }
