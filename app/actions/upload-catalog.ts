@@ -22,12 +22,31 @@ export interface ProductRecord {
   [key: string]: any;
 }
 
+// Sanitizar codificación de textos
+function fixEncoding(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/NIÃ'A/g, 'NIÑA')
+    .replace(/NIÑ'A/g, 'NIÑA')
+    .replace(/COMPAÃIA/g, 'COMPAÑIA')
+    .replace(/COMPAÑIA/g, 'COMPAÑIA')
+    .replace(/\uFFFD/g, 'Ñ')
+    .trim();
+}
+
+function esInvalidoParaLinea(val: string): boolean {
+  if (!val) return true;
+  const clean = val.trim();
+  if (!isNaN(Number(clean))) return true;
+  if (/^[\d.,\s]+$/.test(clean)) return true;
+  return false;
+}
+
 export async function processAndUploadCatalog(formData: FormData) {
   try {
     const userRole = formData.get('user') as string;
-
     if (userRole !== 'admin') {
-      return { success: false, error: 'No tienes permisos de administrador para subir archivos.' };
+      return { success: false, error: 'No tienes permisos de administrador para realizar esta acción.' };
     }
 
     const file = formData.get('file') as File;
@@ -38,55 +57,46 @@ export async function processAndUploadCatalog(formData: FormData) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const workbook = XLSX.read(buffer, { type: 'buffer', codepage: 65001 });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
 
-    // Convertir hoja a JSON
     const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-
     if (!rawRows || rawRows.length === 0) {
-      return { success: false, error: 'El archivo subido está vacío o no tiene el formato correcto.' };
+      return { success: false, error: 'El archivo Excel no contiene datos.' };
     }
 
     const uniqueProductsMap = new Map<string, ProductRecord>();
 
     rawRows.forEach((row) => {
-      // 1. REFERENCIA (Columna A)
-      const referencia = String(row['Referencia'] || row['referencia'] || row['A'] || '').trim();
+      const referencia = fixEncoding(String(row['Referencia'] || row['referencia'] || row['A'] || '')).trim();
       if (!referencia || referencia.toUpperCase() === 'REFERENCIA') return;
 
-      // 2. DESCRIPCIÓN (Columna B)
-      const descripcion = String(row['Descripcion'] || row['DESCRIPCION'] || row['Descripción'] || row['B'] || '').trim();
+      const descripcion = fixEncoding(String(row['Descripcion'] || row['DESCRIPCION'] || row['Descripción'] || row['B'] || ''));
 
-      // 3. LÍNEA / PROVEEDOR (Columna D)
-      let lineaRaw = String(row['Linea'] || row['LINEA'] || row['Línea'] || row['D'] || '').trim();
+      let lineaRaw = fixEncoding(String(
+        row['Linea'] || row['LINEA'] || row['Línea'] || row['LÍNEA'] || row['Proveedor'] || row['PROVEEDOR'] || row['D'] || ''
+      ));
 
-      // Validación estricta: Si es número/decimal/precio o está vacío, asignar 'SIN LÍNEA'
-      if (!lineaRaw || !isNaN(Number(lineaRaw)) || /^[\d.,]+$/.test(lineaRaw)) {
+      if (esInvalidoParaLinea(lineaRaw)) {
         lineaRaw = 'SIN LÍNEA';
       }
 
-      // 4. EXISTENCIA (Columna E)
-      const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['E'] || '0'), 10) || 0;
+      const existencia = parseInt(String(row['Existencia'] || row['EXISTENCIA'] || row['E'] || '0').replace(',', '.'), 10) || 0;
 
-      // 5. PRECIOS (Columnas F, G, H, I, J)
-      const pvp1 = parseFloat(String(row['PVP1'] || row['pvp1'] || row['F'] || '0').replace(',', '.')) || 0;
-      const pvp3 = parseFloat(String(row['PVP3'] || row['pvp3'] || row['G'] || '0').replace(',', '.')) || 0;
-      const pvp4 = parseFloat(String(row['PVP4'] || row['pvp4'] || row['H'] || '0').replace(',', '.')) || 0;
-      const pvp5 = parseFloat(String(row['PVP5'] || row['pvp5'] || row['I'] || '0').replace(',', '.')) || 0;
-      const pvp6 = parseFloat(String(row['PVP6'] || row['pvp6'] || row['J'] || '0').replace(',', '.')) || 0;
+      const parseNum = (v: any) => {
+        if (!v) return 0;
+        const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
+        return isNaN(n) ? 0 : n;
+      };
 
-      // 6. ESTADO COMPRA (Columna L)
-      const estadoCompraRaw = 
-        row['estado compra'] || 
-        row['ESTADO COMPRA'] || 
-        row['Estado Compra'] || 
-        row['estado_compra'] || 
-        row['L'] || 
-        'SI - SI SE ANALIZA PARA COMPRAS';
+      const pvp1 = parseNum(row['PVP1'] || row['pvp1'] || row['F']);
+      const pvp3 = parseNum(row['PVP3'] || row['pvp3'] || row['G']);
+      const pvp4 = parseNum(row['PVP4'] || row['pvp4'] || row['H']);
+      const pvp5 = parseNum(row['PVP5'] || row['pvp5'] || row['I']);
+      const pvp6 = parseNum(row['PVP6'] || row['pvp6'] || row['J']);
 
-      const estadoCompra = String(estadoCompraRaw).trim();
+      const estadoCompra = fixEncoding(String(row['estado compra'] || row['ESTADO COMPRA'] || row['L'] || 'SI - SI SE ANALIZA PARA COMPRAS'));
 
       uniqueProductsMap.set(referencia, {
         referencia,
@@ -103,27 +113,18 @@ export async function processAndUploadCatalog(formData: FormData) {
     });
 
     const formattedProducts = Array.from(uniqueProductsMap.values());
-
-    if (formattedProducts.length === 0) {
-      return { success: false, error: 'No se encontraron filas con el campo "Referencia" válido.' };
-    }
-
-    // Subida en bloques a Supabase
     const chunkSize = 500;
     let totalInserted = 0;
 
     for (let i = 0; i < formattedProducts.length; i += chunkSize) {
       const chunk = formattedProducts.slice(i, i + chunkSize);
-
       const { error } = await supabase
         .from('products')
         .upsert(chunk, { onConflict: 'referencia' });
 
       if (error) {
-        console.error('Error al insertar en Supabase:', error);
-        return { success: false, error: `Error en la base de datos: ${error.message}` };
+        return { success: false, error: `Error DB: ${error.message}` };
       }
-
       totalInserted += chunk.length;
     }
 
@@ -132,12 +133,7 @@ export async function processAndUploadCatalog(formData: FormData) {
       count: totalInserted,
       message: `Catálogo actualizado exitosamente. (${totalInserted} productos procesados)`,
     };
-
   } catch (error: any) {
-    console.error('Error al procesar el archivo:', error);
-    return {
-      success: false,
-      error: error.message || 'Ocurrió un error inesperado al procesar el archivo.',
-    };
+    return { success: false, error: error.message || 'Error inesperado al procesar el archivo.' };
   }
 }
