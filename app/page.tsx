@@ -200,22 +200,23 @@ export default function CatalogoPage() {
   };
 
   async function fetchProducts() {
-    setLoading(true);
+  setLoading(true);
+  try {
+    // Pedir hasta 5000 productos para asegurar que traiga toda la lista (1896+)
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .range(0, 4999);
 
-    try {
-      const { data, error } = await supabase.from('products').select('*').range(0, 2999);
-
-      if (!error && data) {
-        setProducts(data as Product[]);
-        const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean) as string[];
-        setLineas(uniqueLineas);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+    if (!error && data) {
+      setProducts(data);
     }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => {
     if (isAuthenticated) {
