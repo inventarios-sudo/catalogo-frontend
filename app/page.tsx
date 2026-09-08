@@ -176,7 +176,7 @@ function ProductCard({
           <div className="text-right">
             <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
             <div className="text-xs font-bold text-red-600">
-              {product.existencia} und
+              {product.existencia ?? 0} und
             </div>
           </div>
         </div>
@@ -213,15 +213,41 @@ export default function CatalogoPage() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrImageUrl, setQrImageUrl] = useState('');
 
+  // Paginación para obtener TODOS los productos de Supabase
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('products').select('*').range(0, 4999);
-      if (!error && data) {
-        setProducts(data as Product[]);
-        const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean) as string[];
-        setLineas(uniqueLineas);
+      let allProducts: Product[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error) {
+          console.error('Error recuperando catálogo:', error);
+          break;
+        }
+
+        if (data && data.length > 0) {
+          allProducts = [...allProducts, ...(data as Product[])];
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        } else {
+          hasMore = false;
+        }
       }
+
+      setProducts(allProducts);
+      const uniqueLineas = Array.from(new Set(allProducts.map((p) => p.linea))).filter(Boolean) as string[];
+      setLineas(uniqueLineas);
     } catch (err) {
       console.error('Error cargando productos:', err);
     } finally {
@@ -299,7 +325,7 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
-  // NUEVA FUNCIÓN OPTIMIZADA DE CARGA DIRECTA
+  // Carga masiva con lectura flexible de columnas
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -331,24 +357,47 @@ export default function CatalogoPage() {
         throw new Error('El archivo está vacío.');
       }
 
-      // Normalización y limpieza con .trim()
       const uniqueProductsMap = new Map();
+
       rawData.forEach((row) => {
-        const ref = String(row['REFERENCIA'] || row['referencia'] || row['Referencia'] || '').trim();
-        const desc = String(row['DESCRIPCION'] || row['descripcion'] || row['Descripcion'] || '').trim();
-        const linea = String(row['LINEA'] || row['linea'] || row['Linea'] || '').trim();
+        const keys = Object.keys(row);
+        const getVal = (possibleNames: string[]) => {
+          const matchedKey = keys.find((k) =>
+            possibleNames.some(
+              (name) => name.toLowerCase() === k.trim().toLowerCase()
+            )
+          );
+          return matchedKey ? row[matchedKey] : undefined;
+        };
+
+        const ref = String(getVal(['referencia', 'ref', 'codigo']) || '').trim();
+        const desc = String(getVal(['descripcion', 'desc', 'nombre', 'producto']) || '').trim();
+        const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
+
+        // Extracción limpia de Existencia
+        const rawExistencia = getVal(['existencia', 'existencias', 'stock', 'cant', 'cantidad']);
+        const cleanExistencia = String(rawExistencia ?? 0).replace(/[,.\s]/g, '').trim();
+        const parsedExistencia = parseInt(cleanExistencia, 10);
+        const existenciaFinal = isNaN(parsedExistencia) ? 0 : parsedExistencia;
+
+        const parsePrice = (val: any) => {
+          if (!val) return 0;
+          const clean = String(val).replace(',', '.').trim();
+          const num = parseFloat(clean);
+          return isNaN(num) ? 0 : num;
+        };
 
         if (ref) {
           uniqueProductsMap.set(ref, {
             referencia: ref,
             descripcion: desc,
             linea: linea,
-            pvp1: parseFloat(row['PVP1'] || row['pvp1'] || 0) || 0,
-            pvp3: parseFloat(row['PVP3'] || row['pvp3'] || 0) || 0,
-            pvp4: parseFloat(row['PVP4'] || row['pvp4'] || 0) || 0,
-            pvp5: parseFloat(row['PVP5'] || row['pvp5'] || 0) || 0,
-            pvp6: parseFloat(row['PVP6'] || row['pvp6'] || 0) || 0,
-            existencia: parseInt(row['EXISTENCIA'] || row['existencia'] || 0, 10) || 0,
+            pvp1: parsePrice(getVal(['pvp1', 'pvp 1', 'precio1'])),
+            pvp3: parsePrice(getVal(['pvp3', 'pvp 3', 'precio3'])),
+            pvp4: parsePrice(getVal(['pvp4', 'pvp 4', 'precio4'])),
+            pvp5: parsePrice(getVal(['pvp5', 'pvp 5', 'precio5'])),
+            pvp6: parsePrice(getVal(['pvp6', 'pvp 6', 'precio6'])),
+            existencia: existenciaFinal,
           });
         }
       });
@@ -357,10 +406,9 @@ export default function CatalogoPage() {
       const total = productsToUpload.length;
 
       if (total === 0) {
-        throw new Error('No se encontraron productos con el campo REFERENCIA válido.');
+        throw new Error('No se encontraron productos con la columna REFERENCIA válida.');
       }
 
-      // Inserción masiva en lotes de 300
       const BATCH_SIZE = 300;
       let processed = 0;
 
@@ -378,7 +426,7 @@ export default function CatalogoPage() {
       }
 
       setUploadStatus({ success: true, message: `¡Éxito! Se actualizaron ${total} productos correctamente.` });
-      fetchProducts();
+      await fetchProducts();
       form.reset();
     } catch (err: any) {
       console.error(err);
