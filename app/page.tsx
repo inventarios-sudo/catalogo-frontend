@@ -213,7 +213,6 @@ export default function CatalogoPage() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrImageUrl, setQrImageUrl] = useState('');
 
-  // Paginación para obtener TODOS los productos de Supabase
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -325,7 +324,7 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
-  // Carga masiva con lectura flexible de columnas
+  // Carga masiva con borrado previo para evitar desfases de cantidad
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -347,7 +346,7 @@ export default function CatalogoPage() {
     try {
       const file = fileInput.files[0];
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
+      const workbook = XLSX.read(buffer, { type: 'array', raw: false });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
 
@@ -357,7 +356,7 @@ export default function CatalogoPage() {
         throw new Error('El archivo está vacío.');
       }
 
-      const uniqueProductsMap = new Map();
+      const productsToUpload: any[] = [];
 
       rawData.forEach((row) => {
         const keys = Object.keys(row);
@@ -376,19 +375,23 @@ export default function CatalogoPage() {
 
         // Extracción limpia de Existencia
         const rawExistencia = getVal(['existencia', 'existencias', 'stock', 'cant', 'cantidad']);
-        const cleanExistencia = String(rawExistencia ?? 0).replace(/[,.\s]/g, '').trim();
-        const parsedExistencia = parseInt(cleanExistencia, 10);
-        const existenciaFinal = isNaN(parsedExistencia) ? 0 : parsedExistencia;
+        let existenciaFinal = 0;
+
+        if (rawExistencia !== undefined && rawExistencia !== null && rawExistencia !== '') {
+          const cleanString = String(rawExistencia).replace(',', '.').replace(/[^\d.-]/g, '').trim();
+          const parsedNumber = Math.round(parseFloat(cleanString));
+          existenciaFinal = isNaN(parsedNumber) ? 0 : parsedNumber;
+        }
 
         const parsePrice = (val: any) => {
           if (!val) return 0;
-          const clean = String(val).replace(',', '.').trim();
+          const clean = String(val).replace(',', '.').replace(/[^\d.-]/g, '').trim();
           const num = parseFloat(clean);
           return isNaN(num) ? 0 : num;
         };
 
         if (ref) {
-          uniqueProductsMap.set(ref, {
+          productsToUpload.push({
             referencia: ref,
             descripcion: desc,
             linea: linea,
@@ -402,14 +405,26 @@ export default function CatalogoPage() {
         }
       });
 
-      const productsToUpload = Array.from(uniqueProductsMap.values());
       const total = productsToUpload.length;
 
       if (total === 0) {
         throw new Error('No se encontraron productos con la columna REFERENCIA válida.');
       }
 
-      const BATCH_SIZE = 300;
+      setUploadStatus({ message: 'Limpiando catálogo anterior...' });
+
+      // PASO 1: Eliminar registros obsoletos de Supabase
+      const { error: deleteError } = await supabase
+        .from('products')
+        .delete()
+        .neq('referencia', '');
+
+      if (deleteError) {
+        throw new Error(`Error al limpiar la base de datos: ${deleteError.message}`);
+      }
+
+      // PASO 2: Insertar la nueva lista limpia
+      const BATCH_SIZE = 100;
       let processed = 0;
 
       for (let i = 0; i < total; i += BATCH_SIZE) {
@@ -425,7 +440,10 @@ export default function CatalogoPage() {
         setUploadStatus({ message: `Cargando... ${processed} de ${total} productos.` });
       }
 
-      setUploadStatus({ success: true, message: `¡Éxito! Se actualizaron ${total} productos correctamente.` });
+      setUploadStatus({ 
+        success: true, 
+        message: `¡Éxito! Se sincronizaron exactamente ${total} productos con sus existencias.` 
+      });
       await fetchProducts();
       form.reset();
     } catch (err: any) {
