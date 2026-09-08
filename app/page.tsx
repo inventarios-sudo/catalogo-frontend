@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { processAndUploadCatalog } from '@/app/actions/upload-catalog';
+import * as XLSX from 'xlsx';
 
 const SUPABASE_URL = 'https://ykkfaflwzoyynhtmtqwp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -125,6 +125,66 @@ function ProductImage({
   );
 }
 
+function ProductCard({
+  product,
+  priceList,
+  showPrices,
+  bucketName,
+  onImageClick
+}: {
+  product: Product;
+  priceList: 'pvp1' | 'pvp3' | 'pvp4' | 'pvp5' | 'pvp6';
+  showPrices: boolean;
+  bucketName: string;
+  onImageClick: (url: string) => void;
+}) {
+  const price = product[priceList] || 0;
+
+  return (
+    <div className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid print:shadow-none print:border-gray-300">
+      <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2 print:bg-white">
+        <ProductImage
+          product={product}
+          bucketName={bucketName}
+          onImageClick={onImageClick}
+        />
+      </div>
+
+      <div className="flex-1 flex flex-col justify-between">
+        <div>
+          <div className="text-[10px] font-bold text-blue-600 uppercase mb-0.5">
+            {product.linea}
+          </div>
+          <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
+            {product.descripcion}
+          </h3>
+          <div className="text-[11px] text-gray-500 mb-3">
+            Ref: <span className="font-mono font-bold text-gray-800">{product.referencia}</span>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-gray-100 flex items-end justify-between">
+          <div>
+            {showPrices ? (
+              <div className="text-sm font-extrabold text-green-600">
+                ${typeof price === 'number' ? price.toFixed(2) : price}
+              </div>
+            ) : (
+              <div className="text-[11px] text-gray-400 italic">Sin Precio</div>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
+            <div className="text-xs font-bold text-red-600">
+              {product.existencia} und
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CatalogoPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isQRView, setIsQRView] = useState(false);
@@ -150,9 +210,24 @@ export default function CatalogoPage() {
   const [uploadStatus, setUploadStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Estado para el modal del QR
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrImageUrl, setQrImageUrl] = useState('');
+
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('products').select('*').range(0, 4999);
+      if (!error && data) {
+        setProducts(data as Product[]);
+        const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean) as string[];
+        setLineas(uniqueLineas);
+      }
+    } catch (err) {
+      console.error('Error cargando productos:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -173,7 +248,32 @@ export default function CatalogoPage() {
         fetchProducts();
       }
     }
-  }, []);
+  }, [fetchProducts]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProducts();
+    }
+  }, [isAuthenticated, fetchProducts]);
+
+  useEffect(() => {
+    let result = products;
+
+    if (selectedLine) {
+      result = result.filter((p) => p.linea === selectedLine);
+    }
+
+    if (searchTerm.trim() !== '') {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (p) =>
+          (p.referencia && p.referencia.toLowerCase().includes(term)) ||
+          (p.descripcion && p.descripcion.toLowerCase().includes(term))
+      );
+    }
+
+    setFilteredProducts(result);
+  }, [searchTerm, selectedLine, products]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,49 +299,7 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
-  async function fetchProducts() {
-    setLoading(true);
-
-    try {
-      const { data, error } = await supabase.from('products').select('*').range(0, 4999);
-
-      if (!error && data) {
-        setProducts(data as Product[]);
-        const uniqueLineas = Array.from(new Set(data.map((p: Product) => p.linea))).filter(Boolean) as string[];
-        setLineas(uniqueLineas);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchProducts();
-    }
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    let result = products;
-
-    if (selectedLine) {
-      result = result.filter((p) => p.linea === selectedLine);
-    }
-
-    if (searchTerm.trim() !== '') {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(
-        (p) =>
-          (p.referencia && p.referencia.toLowerCase().includes(term)) ||
-          (p.descripcion && p.descripcion.toLowerCase().includes(term))
-      );
-    }
-
-    setFilteredProducts(result);
-  }, [searchTerm, selectedLine, products]);
-
+  // NUEVA FUNCIÓN OPTIMIZADA DE CARGA DIRECTA
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -258,25 +316,78 @@ export default function CatalogoPage() {
     }
 
     setUploading(true);
-    setUploadStatus(null);
+    setUploadStatus({ message: 'Leyendo archivo Excel...' });
 
-    const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-    formData.append('user', currentUserRole);
+    try {
+      const file = fileInput.files[0];
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
 
-    const res = await processAndUploadCatalog(formData);
-    setUploading(false);
+      const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-    if (res.success) {
-      setUploadStatus({ success: true, message: `¡Éxito! Se actualizaron ${res.count} productos.` });
+      if (!rawData || rawData.length === 0) {
+        throw new Error('El archivo está vacío.');
+      }
+
+      // Normalización y limpieza con .trim()
+      const uniqueProductsMap = new Map();
+      rawData.forEach((row) => {
+        const ref = String(row['REFERENCIA'] || row['referencia'] || row['Referencia'] || '').trim();
+        const desc = String(row['DESCRIPCION'] || row['descripcion'] || row['Descripcion'] || '').trim();
+        const linea = String(row['LINEA'] || row['linea'] || row['Linea'] || '').trim();
+
+        if (ref) {
+          uniqueProductsMap.set(ref, {
+            referencia: ref,
+            descripcion: desc,
+            linea: linea,
+            pvp1: parseFloat(row['PVP1'] || row['pvp1'] || 0) || 0,
+            pvp3: parseFloat(row['PVP3'] || row['pvp3'] || 0) || 0,
+            pvp4: parseFloat(row['PVP4'] || row['pvp4'] || 0) || 0,
+            pvp5: parseFloat(row['PVP5'] || row['pvp5'] || 0) || 0,
+            pvp6: parseFloat(row['PVP6'] || row['pvp6'] || 0) || 0,
+            existencia: parseInt(row['EXISTENCIA'] || row['existencia'] || 0, 10) || 0,
+          });
+        }
+      });
+
+      const productsToUpload = Array.from(uniqueProductsMap.values());
+      const total = productsToUpload.length;
+
+      if (total === 0) {
+        throw new Error('No se encontraron productos con el campo REFERENCIA válido.');
+      }
+
+      // Inserción masiva en lotes de 300
+      const BATCH_SIZE = 300;
+      let processed = 0;
+
+      for (let i = 0; i < total; i += BATCH_SIZE) {
+        const batch = productsToUpload.slice(i, i + BATCH_SIZE);
+
+        const { error } = await supabase
+          .from('products')
+          .upsert(batch, { onConflict: 'referencia' });
+
+        if (error) throw new Error(error.message);
+
+        processed += batch.length;
+        setUploadStatus({ message: `Cargando... ${processed} de ${total} productos.` });
+      }
+
+      setUploadStatus({ success: true, message: `¡Éxito! Se actualizaron ${total} productos correctamente.` });
       fetchProducts();
       form.reset();
-    } else {
-      setUploadStatus({ success: false, message: res.error || 'Ocurrió un error al procesar el archivo.' });
+    } catch (err: any) {
+      console.error(err);
+      setUploadStatus({ success: false, message: err.message || 'Error al procesar el archivo.' });
+    } finally {
+      setUploading(false);
     }
   };
 
-  // Generación directa de la imagen del QR vía API sin fallos de paquetes
   const handleGenerateQR = () => {
     const baseUrl = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
@@ -295,7 +406,7 @@ export default function CatalogoPage() {
     setShowQRModal(true);
   };
 
-  // VISTA PÚBLICA / MODO QR PARA CLIENTES
+  // VISTA PÚBLICA (MODO QR)
   if (isQRView) {
     return (
       <div className="min-h-screen bg-[#f8fafc] p-4 md:p-6">
@@ -314,59 +425,16 @@ export default function CatalogoPage() {
             <div className="text-center py-20 text-gray-400 text-sm font-semibold">Cargando catálogo...</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredProducts.map((p) => {
-                const price = p[priceList] || 0;
-
-                return (
-                  <div
-                    key={p.referencia}
-                    className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm"
-                  >
-                    <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2">
-                      <ProductImage
-                        product={p}
-                        bucketName={bucketName}
-                        onImageClick={(url) => setPreviewImage(url)}
-                      />
-                    </div>
-
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div>
-                        <div className="text-[10px] font-bold text-blue-600 uppercase mb-0.5">
-                          {p.linea}
-                        </div>
-
-                        <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
-                          {p.descripcion}
-                        </h3>
-
-                        <div className="text-[11px] text-gray-500 mb-3">
-                          Ref: <span className="font-mono font-bold text-gray-800">{p.referencia}</span>
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-gray-100 flex items-end justify-between">
-                        <div>
-                          {showPrices ? (
-                            <div className="text-sm font-extrabold text-green-600">
-                              ${typeof price === 'number' ? price.toFixed(2) : price}
-                            </div>
-                          ) : (
-                            <div className="text-[11px] text-gray-400 italic">Sin Precio</div>
-                          )}
-                        </div>
-
-                        <div className="text-right">
-                          <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
-                          <div className="text-xs font-bold text-red-600">
-                            {p.existencia} und
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {filteredProducts.map((p) => (
+                <ProductCard
+                  key={p.referencia}
+                  product={p}
+                  priceList={priceList}
+                  showPrices={showPrices}
+                  bucketName={bucketName}
+                  onImageClick={(url) => setPreviewImage(url)}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -452,10 +520,9 @@ export default function CatalogoPage() {
     );
   }
 
-  // VISTA PANEL VENDEDOR / ADMIN CON BOTÓN DE QR VISIBLE
+  // VISTA PANEL VENDEDOR / ADMIN
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6 print:bg-white print:p-0">
-      
       <style jsx global>{`
         @media print {
           @page {
@@ -514,7 +581,6 @@ export default function CatalogoPage() {
       </div>
 
       <div className="max-w-7xl mx-auto space-y-4 print-content-padding">
-
         <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-sm space-y-4 print:hidden">
           {currentUserRole === 'admin' && (
             <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-4">
@@ -531,15 +597,15 @@ export default function CatalogoPage() {
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="bg-[#94a3b8] hover:bg-slate-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg"
+                  className="bg-[#0284c7] hover:bg-sky-700 text-white text-xs font-semibold py-1.5 px-3 rounded-lg disabled:bg-gray-400"
                 >
-                  🔖 {uploading ? 'Cargando...' : 'Actualizar Catálogo'}
+                  🔖 {uploading ? 'Procesando...' : 'Actualizar Catálogo'}
                 </button>
               </form>
 
               {uploadStatus && (
-                <div className="mt-2 text-xs text-emerald-700 font-semibold">
-                  ✅ {uploadStatus.message}
+                <div className={`mt-2 text-xs font-semibold ${uploadStatus.success ? 'text-emerald-700' : 'text-blue-600'}`}>
+                  {uploadStatus.message}
                 </div>
               )}
             </div>
@@ -604,7 +670,6 @@ export default function CatalogoPage() {
                 <span>Ver Precios</span>
               </label>
 
-              {/* BOTÓN GENERAR QR */}
               <button
                 onClick={handleGenerateQR}
                 className="bg-[#0284c7] hover:bg-sky-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors flex items-center gap-1"
@@ -632,59 +697,16 @@ export default function CatalogoPage() {
         {/* GRILLA DE PRODUCTOS */}
         {!loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3">
-            {filteredProducts.map((p) => {
-              const price = p[priceList] || 0;
-
-              return (
-                <div
-                  key={p.referencia}
-                  className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid print:shadow-none print:border-gray-300"
-                >
-                  <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2 print:bg-white">
-                    <ProductImage
-                      product={p}
-                      bucketName={bucketName}
-                      onImageClick={(url) => setPreviewImage(url)}
-                    />
-                  </div>
-
-                  <div className="flex-1 flex flex-col justify-between">
-                    <div>
-                      <div className="text-[10px] font-bold text-blue-600 uppercase mb-0.5">
-                        {p.linea}
-                      </div>
-
-                      <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
-                        {p.descripcion}
-                      </h3>
-
-                      <div className="text-[11px] text-gray-500 mb-3">
-                        Ref: <span className="font-mono font-bold text-gray-800">{p.referencia}</span>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-100 flex items-end justify-between">
-                      <div>
-                        {showPrices ? (
-                          <div className="text-sm font-extrabold text-green-600">
-                            ${typeof price === 'number' ? price.toFixed(2) : price}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-gray-400 italic">Sin Precio</div>
-                        )}
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
-                        <div className="text-xs font-bold text-red-600">
-                          {p.existencia} und
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredProducts.map((p) => (
+              <ProductCard
+                key={p.referencia}
+                product={p}
+                priceList={priceList}
+                showPrices={showPrices}
+                bucketName={bucketName}
+                onImageClick={(url) => setPreviewImage(url)}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -763,4 +785,3 @@ export default function CatalogoPage() {
     </div>
   );
 }
-
