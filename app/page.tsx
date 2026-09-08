@@ -19,6 +19,7 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
+  imagen?: string;
   [key: string]: any;
 }
 
@@ -40,6 +41,7 @@ const USERS_DATABASE: Record<string, { pass: string; role: string; name: string 
 function resolveImageUrl(product: Product, bucketName: string): string[] {
   let foundUrl = '';
 
+  // 1. Buscar en propiedades conocidas o en cualquier campo con "http"
   for (const key of Object.keys(product)) {
     const val = product[key];
     if (typeof val === 'string' && val.trim().startsWith('http')) {
@@ -48,6 +50,7 @@ function resolveImageUrl(product: Product, bucketName: string): string[] {
     }
   }
 
+  // 2. Si es de Google Drive, resolver los endpoints directo a imagen
   if (foundUrl.includes('drive.google.com') || foundUrl.includes('docs.google.com')) {
     const match = foundUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || foundUrl.match(/id=([a-zA-Z0-9_-]+)/);
     if (match && match[1]) {
@@ -64,6 +67,7 @@ function resolveImageUrl(product: Product, bucketName: string): string[] {
     return [foundUrl];
   }
 
+  // 3. Si no venía URL en el Excel, recurrir al Bucket de Supabase Storage por referencia
   const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
   return [
     `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`,
@@ -324,7 +328,7 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
-  // Carga masiva con borrado previo para evitar desfases de cantidad
+  // Carga masiva conservando imágenes y limpiando duplicados obsoletos
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -373,6 +377,9 @@ export default function CatalogoPage() {
         const desc = String(getVal(['descripcion', 'desc', 'nombre', 'producto']) || '').trim();
         const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
 
+        // Extracción de imagen
+        const rawImagen = String(getVal(['imagen', 'foto', 'url', 'link', 'drive']) || '').trim();
+
         // Extracción limpia de Existencia
         const rawExistencia = getVal(['existencia', 'existencias', 'stock', 'cant', 'cantidad']);
         let existenciaFinal = 0;
@@ -391,7 +398,7 @@ export default function CatalogoPage() {
         };
 
         if (ref) {
-          productsToUpload.push({
+          const productObj: any = {
             referencia: ref,
             descripcion: desc,
             linea: linea,
@@ -401,7 +408,13 @@ export default function CatalogoPage() {
             pvp5: parsePrice(getVal(['pvp5', 'pvp 5', 'precio5'])),
             pvp6: parsePrice(getVal(['pvp6', 'pvp 6', 'precio6'])),
             existencia: existenciaFinal,
-          });
+          };
+
+          if (rawImagen) {
+            productObj.imagen = rawImagen;
+          }
+
+          productsToUpload.push(productObj);
         }
       });
 
@@ -442,7 +455,7 @@ export default function CatalogoPage() {
 
       setUploadStatus({ 
         success: true, 
-        message: `¡Éxito! Se sincronizaron exactamente ${total} productos con sus existencias.` 
+        message: `¡Éxito! Se actualizaron correctamente los ${total} productos e imágenes.` 
       });
       await fetchProducts();
       form.reset();
