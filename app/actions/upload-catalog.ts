@@ -74,7 +74,7 @@ export async function processAndUploadCatalog(formData: FormData) {
           pvp5: parseFloat(String(row['PVP5'] || row['pvp5'] || 0).replace(',', '.')) || 0,
           pvp6: parseFloat(String(row['PVP6'] || row['pvp6'] || 0).replace(',', '.')) || 0,
           existencia: existenciaFinal,
-          stock: existenciaFinal, // Se envían ambos campos por si la base de datos o frontend usa 'stock'
+          stock: existenciaFinal, // Guardamos ambas claves por compatibilidad con la BD y el frontend
         });
       }
     });
@@ -85,7 +85,7 @@ export async function processAndUploadCatalog(formData: FormData) {
       return { success: false, error: 'No se encontraron referencias válidas en la columna REFERENCIA.' };
     }
 
-    // 3. Subir a Supabase en lotes (Batches) de 500 registros para evitar recarga del servidor
+    // 3. Subir a Supabase en lotes (Batches) de 500 registros
     const BATCH_SIZE = 500;
     let totalInserted = 0;
 
