@@ -33,7 +33,7 @@ export async function processAndUploadCatalog(formData: FormData) {
     const uniqueProductsMap = new Map();
 
     rawData.forEach((row) => {
-      // Normalización de nombres de columnas y limpieza de espacios (.trim())
+      // 1. Obtener Referencia limpiando espacios
       const ref = String(
         row['REFERENCIA'] || row['referencia'] || row['Referencia'] || ''
       ).trim();
@@ -46,7 +46,7 @@ export async function processAndUploadCatalog(formData: FormData) {
         row['LINEA'] || row['linea'] || row['Linea'] || ''
       ).trim();
 
-      // Detección flexible de la columna Existencia / Stock
+      // 2. Extraer Existencia buscando todas las variaciones de la columna
       const rawExistencia = 
         row['Existencia'] ?? 
         row['EXISTENCIA'] ?? 
@@ -55,30 +55,34 @@ export async function processAndUploadCatalog(formData: FormData) {
         row['stock'] ?? 
         0;
 
-      // Limpieza y conversión a número entero
-      const parsedExistencia = parseInt(
-        String(rawExistencia).replace(/,/g, '').trim(), 
-        10
-      );
+      // Sanitizar el valor: eliminar comas, puntos y espacios antes de convertir
+      const cleanString = String(rawExistencia).replace(/[,.\s]/g, '').trim();
+      const parsedExistencia = parseInt(cleanString, 10);
       const existenciaFinal = isNaN(parsedExistencia) ? 0 : parsedExistencia;
 
-      // Solo procesamos si hay una referencia válida
+      // 3. Mapear precios
+      const parsePrice = (val: any) => {
+        if (!val) return 0;
+        const clean = String(val).replace(',', '.').trim();
+        const num = parseFloat(clean);
+        return isNaN(num) ? 0 : num;
+      };
+
       if (ref) {
         uniqueProductsMap.set(ref, {
           referencia: ref,
           descripcion: desc,
           linea: linea,
-          pvp1: parseFloat(String(row['PVP1'] || row['pvp1'] || 0).replace(',', '.')) || 0,
-          pvp3: parseFloat(String(row['PVP3'] || row['pvp3'] || 0).replace(',', '.')) || 0,
-          pvp4: parseFloat(String(row['PVP4'] || row['pvp4'] || 0).replace(',', '.')) || 0,
-          pvp5: parseFloat(String(row['PVP5'] || row['pvp5'] || 0).replace(',', '.')) || 0,
-          pvp6: parseFloat(String(row['PVP6'] || row['pvp6'] || 0).replace(',', '.')) || 0,
+          pvp1: parsePrice(row['PVP1'] || row['pvp1']),
+          pvp3: parsePrice(row['PVP3'] || row['pvp3']),
+          pvp4: parsePrice(row['PVP4'] || row['pvp4']),
+          pvp5: parsePrice(row['PVP5'] || row['pvp5']),
+          pvp6: parsePrice(row['PVP6'] || row['pvp6']),
           existencia: existenciaFinal,
-          stock: existenciaFinal, // Guardamos ambas claves por compatibilidad con la BD y el frontend
+          stock: existenciaFinal, // Enviar en ambos formatos
         });
       }
     });
-
     const productsToUpload = Array.from(uniqueProductsMap.values());
 
     if (productsToUpload.length === 0) {
