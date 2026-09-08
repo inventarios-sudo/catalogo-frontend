@@ -16,51 +16,40 @@ export async function processAndUploadCatalog(formData: FormData) {
       return { success: false, error: 'No se seleccionó ningún archivo.' };
     }
 
-    // 1. Leer el archivo Excel / CSV enviado
     const bytes = await file.arrayBuffer();
     const workbook = XLSX.read(bytes, { type: 'array' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
-    // Convierte la hoja a objetos JSON
     const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
     if (!rawData || rawData.length === 0) {
       return { success: false, error: 'El archivo Excel está vacío o no se pudo leer.' };
     }
 
-    // 2. Mapear, limpiar espacios invisibles (.trim()) y eliminar duplicados por referencia
     const uniqueProductsMap = new Map();
 
     rawData.forEach((row) => {
-      // 1. Obtener Referencia limpiando espacios
-      const ref = String(
-        row['REFERENCIA'] || row['referencia'] || row['Referencia'] || ''
-      ).trim();
+      // Búsqueda insensible a mayúsculas/minúsculas y espacios en las llaves del Excel
+      const rowKeys = Object.keys(row);
+      
+      const getVal = (keyName: string) => {
+        const foundKey = rowKeys.find(
+          (k) => k.trim().toLowerCase() === keyName.trim().toLowerCase()
+        );
+        return foundKey ? row[foundKey] : undefined;
+      };
 
-      const desc = String(
-        row['DESCRIPCION'] || row['descripcion'] || row['Descripcion'] || ''
-      ).trim();
+      const ref = String(getVal('referencia') || '').trim();
+      const desc = String(getVal('descripcion') || '').trim();
+      const linea = String(getVal('linea') || '').trim();
 
-      const linea = String(
-        row['LINEA'] || row['linea'] || row['Linea'] || ''
-      ).trim();
-
-      // 2. Extraer Existencia buscando todas las variaciones de la columna
-      const rawExistencia = 
-        row['Existencia'] ?? 
-        row['EXISTENCIA'] ?? 
-        row['existencia'] ?? 
-        row['Stock'] ?? 
-        row['stock'] ?? 
-        0;
-
-      // Sanitizar el valor: eliminar comas, puntos y espacios antes de convertir
-      const cleanString = String(rawExistencia).replace(/[,.\s]/g, '').trim();
-      const parsedExistencia = parseInt(cleanString, 10);
+      // Extracción limpia de Existencia
+      const rawExistencia = getVal('existencia') ?? getVal('stock') ?? 0;
+      const cleanExistencia = String(rawExistencia).replace(/[,.\s]/g, '').trim();
+      const parsedExistencia = parseInt(cleanExistencia, 10);
       const existenciaFinal = isNaN(parsedExistencia) ? 0 : parsedExistencia;
 
-      // 3. Mapear precios
       const parsePrice = (val: any) => {
         if (!val) return 0;
         const clean = String(val).replace(',', '.').trim();
@@ -73,23 +62,22 @@ export async function processAndUploadCatalog(formData: FormData) {
           referencia: ref,
           descripcion: desc,
           linea: linea,
-          pvp1: parsePrice(row['PVP1'] || row['pvp1']),
-          pvp3: parsePrice(row['PVP3'] || row['pvp3']),
-          pvp4: parsePrice(row['PVP4'] || row['pvp4']),
-          pvp5: parsePrice(row['PVP5'] || row['pvp5']),
-          pvp6: parsePrice(row['PVP6'] || row['pvp6']),
-          existencia: existenciaFinal,
-          stock: existenciaFinal, // Enviar en ambos formatos
+          pvp1: parsePrice(getVal('pvp1')),
+          pvp3: parsePrice(getVal('pvp3')),
+          pvp4: parsePrice(getVal('pvp4')),
+          pvp5: parsePrice(getVal('pvp5')),
+          pvp6: parsePrice(getVal('pvp6')),
+          existencia: existenciaFinal, // Campo exacto como en Supabase
         });
       }
     });
+
     const productsToUpload = Array.from(uniqueProductsMap.values());
 
     if (productsToUpload.length === 0) {
-      return { success: false, error: 'No se encontraron referencias válidas en la columna REFERENCIA.' };
+      return { success: false, error: 'No se encontraron referencias válidas.' };
     }
 
-    // 3. Subir a Supabase en lotes (Batches) de 500 registros
     const BATCH_SIZE = 500;
     let totalInserted = 0;
 
