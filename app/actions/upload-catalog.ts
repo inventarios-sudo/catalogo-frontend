@@ -46,18 +46,35 @@ export async function processAndUploadCatalog(formData: FormData) {
         row['LINEA'] || row['linea'] || row['Linea'] || ''
       ).trim();
 
+      // Detección flexible de la columna Existencia / Stock
+      const rawExistencia = 
+        row['Existencia'] ?? 
+        row['EXISTENCIA'] ?? 
+        row['existencia'] ?? 
+        row['Stock'] ?? 
+        row['stock'] ?? 
+        0;
+
+      // Limpieza y conversión a número entero
+      const parsedExistencia = parseInt(
+        String(rawExistencia).replace(/,/g, '').trim(), 
+        10
+      );
+      const existenciaFinal = isNaN(parsedExistencia) ? 0 : parsedExistencia;
+
       // Solo procesamos si hay una referencia válida
       if (ref) {
         uniqueProductsMap.set(ref, {
           referencia: ref,
           descripcion: desc,
           linea: linea,
-          pvp1: parseFloat(row['PVP1'] || row['pvp1'] || 0) || 0,
-          pvp3: parseFloat(row['PVP3'] || row['pvp3'] || 0) || 0,
-          pvp4: parseFloat(row['PVP4'] || row['pvp4'] || 0) || 0,
-          pvp5: parseFloat(row['PVP5'] || row['pvp5'] || 0) || 0,
-          pvp6: parseFloat(row['PVP6'] || row['pvp6'] || 0) || 0,
-          existencia: parseInt(row['EXISTENCIA'] || row['existencia'] || 0, 10) || 0,
+          pvp1: parseFloat(String(row['PVP1'] || row['pvp1'] || 0).replace(',', '.')) || 0,
+          pvp3: parseFloat(String(row['PVP3'] || row['pvp3'] || 0).replace(',', '.')) || 0,
+          pvp4: parseFloat(String(row['PVP4'] || row['pvp4'] || 0).replace(',', '.')) || 0,
+          pvp5: parseFloat(String(row['PVP5'] || row['pvp5'] || 0).replace(',', '.')) || 0,
+          pvp6: parseFloat(String(row['PVP6'] || row['pvp6'] || 0).replace(',', '.')) || 0,
+          existencia: existenciaFinal,
+          stock: existenciaFinal, // Se envían ambos campos por si la base de datos o frontend usa 'stock'
         });
       }
     });
