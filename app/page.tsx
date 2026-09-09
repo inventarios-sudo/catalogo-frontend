@@ -41,7 +41,6 @@ const USERS_DATABASE: Record<string, { pass: string; role: string; name: string 
 function resolveImageUrl(product: Product, bucketName: string): string[] {
   let foundUrl = '';
 
-  // 1. Buscar en propiedades conocidas o en cualquier campo con "http"
   for (const key of Object.keys(product)) {
     const val = product[key];
     if (typeof val === 'string' && val.trim().startsWith('http')) {
@@ -50,7 +49,6 @@ function resolveImageUrl(product: Product, bucketName: string): string[] {
     }
   }
 
-  // 2. Si es de Google Drive, resolver los endpoints directo a imagen
   if (foundUrl.includes('drive.google.com') || foundUrl.includes('docs.google.com')) {
     const match = foundUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || foundUrl.match(/id=([a-zA-Z0-9_-]+)/);
     if (match && match[1]) {
@@ -67,7 +65,6 @@ function resolveImageUrl(product: Product, bucketName: string): string[] {
     return [foundUrl];
   }
 
-  // 3. Si no venía URL en el Excel, recurrir al Bucket de Supabase Storage por referencia
   const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
   return [
     `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`,
@@ -285,13 +282,22 @@ export default function CatalogoPage() {
     }
   }, [isAuthenticated, fetchProducts]);
 
+  // EFFECT DE FILTRADO CON LOGICA DE EXISTENCIAS > 0
   useEffect(() => {
     let result = products;
 
+    // 1. Filtrar únicamente productos con stock/existencia > 0
+    result = result.filter((p) => {
+      const existencia = Number(p.existencia);
+      return !isNaN(existencia) && existencia > 0;
+    });
+
+    // 2. Filtro por Línea seleccionada
     if (selectedLine) {
       result = result.filter((p) => p.linea === selectedLine);
     }
 
+    // 3. Filtro por búsqueda de texto
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
       result = result.filter(
@@ -328,7 +334,6 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
-  // Carga masiva conservando imágenes y limpiando duplicados obsoletos
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -377,10 +382,8 @@ export default function CatalogoPage() {
         const desc = String(getVal(['descripcion', 'desc', 'nombre', 'producto']) || '').trim();
         const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
 
-        // Extracción de imagen
         const rawImagen = String(getVal(['imagen', 'foto', 'url', 'link', 'drive']) || '').trim();
 
-        // Extracción limpia de Existencia
         const rawExistencia = getVal(['existencia', 'existencias', 'stock', 'cant', 'cantidad']);
         let existenciaFinal = 0;
 
@@ -426,7 +429,6 @@ export default function CatalogoPage() {
 
       setUploadStatus({ message: 'Limpiando catálogo anterior...' });
 
-      // PASO 1: Eliminar registros obsoletos de Supabase
       const { error: deleteError } = await supabase
         .from('products')
         .delete()
@@ -436,7 +438,6 @@ export default function CatalogoPage() {
         throw new Error(`Error al limpiar la base de datos: ${deleteError.message}`);
       }
 
-      // PASO 2: Insertar la nueva lista limpia
       const BATCH_SIZE = 100;
       let processed = 0;
 
@@ -618,7 +619,7 @@ export default function CatalogoPage() {
             height: 60px;
             display: flex !important;
             align-items: center;
-            justify-content: space-between;
+            justify-between;
             border-bottom: 2px solid #e2e8f0;
             background-color: white;
             z-index: 1000;
