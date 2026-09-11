@@ -19,6 +19,7 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
+  analiza_compras?: string; // Campo para evaluar la condición de compras
   imagen?: string;
   [key: string]: any;
 }
@@ -176,7 +177,7 @@ function ProductCard({
           </div>
           <div className="text-right">
             <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
-            <div className="text-xs font-bold text-red-600">
+            <div className={`text-xs font-bold ${Number(product.existencia) > 0 ? 'text-green-600' : 'text-red-600'}`}>
               {product.existencia ?? 0} und
             </div>
           </div>
@@ -255,6 +256,24 @@ export default function CatalogoPage() {
     }
   }, []);
 
+  // Suscripción en Tiempo Real
+  useEffect(() => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        () => {
+          fetchProducts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchProducts]);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -282,22 +301,38 @@ export default function CatalogoPage() {
     }
   }, [isAuthenticated, fetchProducts]);
 
-  // EFFECT DE FILTRADO CON LOGICA DE EXISTENCIAS > 0
+  // ==========================================
+  // EFFECT DE FILTRADO CON LA NUEVA LÓGICA
+  // ==========================================
   useEffect(() => {
     let result = products;
 
-    // 1. Filtrar únicamente productos con stock/existencia > 0
+    // Regla de Existencia y Análisis de Compras:
+    // 1. Si la existencia es > 0, SIEMPRE se muestra en el catálogo.
+    // 2. Si la existencia es 0:
+    //    - Se muestra si 'analiza_compras' incluye "SI" (SI - SI SE ANALIZA PARA COMPRAS).
+    //    - Se oculta si 'analiza_compras' incluye "NO" (NO - NO SE ANALIZA PARA COMPRAS).
     result = result.filter((p) => {
-      const existencia = Number(p.existencia);
-      return !isNaN(existencia) && existencia > 0;
+      const existencia = Number(p.existencia) || 0;
+
+      // Si tiene stock > 0, se muestra siempre
+      if (existencia > 0) {
+        return true;
+      }
+
+      // Si la existencia es <= 0, verificar el campo analiza_compras
+      const analizaComprasStr = String(p.analiza_compras || p.analizaCompras || p['analiza compras'] || '').toUpperCase();
+
+      // Muestra solo si explícitamente se analiza para compras
+      return analizaComprasStr.includes('SI');
     });
 
-    // 2. Filtro por Línea seleccionada
+    // Filtro por Línea seleccionada
     if (selectedLine) {
       result = result.filter((p) => p.linea === selectedLine);
     }
 
-    // 3. Filtro por búsqueda de texto
+    // Filtro por búsqueda de texto
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
       result = result.filter(
@@ -381,8 +416,8 @@ export default function CatalogoPage() {
         const ref = String(getVal(['referencia', 'ref', 'codigo']) || '').trim();
         const desc = String(getVal(['descripcion', 'desc', 'nombre', 'producto']) || '').trim();
         const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
-
         const rawImagen = String(getVal(['imagen', 'foto', 'url', 'link', 'drive']) || '').trim();
+        const analizaCompras = String(getVal(['analiza_compras', 'analizacompras', 'analiza compras', 'compras']) || '').trim();
 
         const rawExistencia = getVal(['existencia', 'existencias', 'stock', 'cant', 'cantidad']);
         let existenciaFinal = 0;
@@ -411,6 +446,7 @@ export default function CatalogoPage() {
             pvp5: parsePrice(getVal(['pvp5', 'pvp 5', 'precio5'])),
             pvp6: parsePrice(getVal(['pvp6', 'pvp 6', 'precio6'])),
             existencia: existenciaFinal,
+            analiza_compras: analizaCompras,
           };
 
           if (rawImagen) {
@@ -458,7 +494,11 @@ export default function CatalogoPage() {
         success: true, 
         message: `¡Éxito! Se actualizaron correctamente los ${total} productos e imágenes.` 
       });
+
+      setSelectedLine('');
+      setSearchTerm('');
       await fetchProducts();
+
       form.reset();
     } catch (err: any) {
       console.error(err);
@@ -632,7 +672,7 @@ export default function CatalogoPage() {
             height: 30px;
             display: flex !important;
             align-items: center;
-            justify-content: center;
+            justify-center;
             border-top: 1px solid #e2e8f0;
             background-color: white;
             z-index: 1000;
