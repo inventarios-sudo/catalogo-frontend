@@ -156,10 +156,10 @@ function ProductCard({
       <div className="flex-1 flex flex-col justify-between">
         <div>
           <div className="text-[10px] font-bold text-blue-600 uppercase mb-0.5">
-            {product.linea}
+            {product.linea || 'SIN LÍNEA'}
           </div>
           <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
-            {product.descripcion}
+            {product.descripcion || 'SIN DESCRIPCIÓN'}
           </h3>
           <div className="text-[11px] text-gray-500 mb-3">
             Ref: <span className="font-mono font-bold text-gray-800">{product.referencia}</span>
@@ -216,6 +216,7 @@ export default function CatalogoPage() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrImageUrl, setQrImageUrl] = useState('');
 
+  // Carga de productos desde Supabase descartando registros vacíos
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -247,8 +248,15 @@ export default function CatalogoPage() {
         }
       }
 
-      setProducts(allProducts);
-      const uniqueLineas = Array.from(new Set(allProducts.map((p) => p.linea))).filter(Boolean) as string[];
+      // Filtrar productos descartando aquellos que no tengan referencia
+      const validProducts = allProducts.filter(
+        (p) => p && p.referencia && String(p.referencia).trim() !== ''
+      );
+
+      setProducts(validProducts);
+      const uniqueLineas = Array.from(new Set(validProducts.map((p) => p.linea))).filter(
+        (l) => l && String(l).trim() !== ''
+      ) as string[];
       setLineas(uniqueLineas);
     } catch (err) {
       console.error('Error cargando productos:', err);
@@ -301,31 +309,27 @@ export default function CatalogoPage() {
     }
   }, [isAuthenticated, fetchProducts]);
 
-  // ==========================================
-  // FILTRADO ESTRICTO DE EXISTENCIAS Y COMPRAS
-  // ==========================================
+  // Lógica de filtrado en pantalla
   useEffect(() => {
     let result = products;
 
     result = result.filter((p) => {
       const existencia = Number(p.existencia) || 0;
 
-      // 1. Si la existencia es mayor a 0, se muestra en el catálogo
+      // 1. Si la existencia es mayor a 0, siempre se muestra
       if (existencia > 0) {
         return true;
       }
 
-      // 2. Si la existencia es 0 o menor, extraer el valor del estado de compra
+      // 2. Si la existencia es 0 o menor, evaluar "estado compra"
       let estadoCompraRaw = '';
 
       for (const k of Object.keys(p)) {
-        const keyLower = k.toLowerCase().trim();
+        const keyClean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (
-          keyLower === 'estado compra' ||
-          keyLower === 'estado_compra' ||
-          keyLower === 'analiza_compras' ||
-          keyLower === 'analiza compras' ||
-          keyLower === 'compras'
+          keyClean === 'estadocompra' ||
+          keyClean === 'analizacompras' ||
+          keyClean === 'compras'
         ) {
           if (p[k]) {
             estadoCompraRaw = String(p[k]).toUpperCase().trim();
@@ -334,26 +338,21 @@ export default function CatalogoPage() {
         }
       }
 
-      // Si explícitamente dice "NO", NO se muestra
       if (estadoCompraRaw.startsWith('NO') || estadoCompraRaw.includes('NO -')) {
         return false;
       }
 
-      // Si explícitamente dice "SI", SÍ se muestra
       if (estadoCompraRaw.startsWith('SI') || estadoCompraRaw.includes('SI -')) {
         return true;
       }
 
-      // Caso por defecto cuando la existencia es 0 y no se especifica "SI": Ocultar
       return false;
     });
 
-    // Filtro por Línea seleccionada
     if (selectedLine) {
       result = result.filter((p) => p.linea === selectedLine);
     }
 
-    // Filtro por búsqueda de texto
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
       result = result.filter(
@@ -390,9 +389,7 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
-  // ==========================================
-  // CARGA Y PROCESAMIENTO MASIVO DE EXCEL / CSV
-  // ==========================================
+  // Carga masiva desde Excel con desinfección de nombres de columna
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -426,14 +423,22 @@ export default function CatalogoPage() {
 
       const productsToUpload: any[] = [];
 
+      // Función limpiadora de nombres de columna
+      const cleanKey = (str: string) =>
+        str
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // Elimina tildes
+          .replace(/[^a-z0-9]/g, '');      // Deja solo letras y números
+
       rawData.forEach((row) => {
         const keys = Object.keys(row);
-        const getVal = (possibleNames: string[]) => {
-          const matchedKey = keys.find((k) =>
-            possibleNames.some(
-              (name) => name.toLowerCase().trim() === k.trim().toLowerCase()
-            )
-          );
+
+        const getVal = (targetKeywords: string[]) => {
+          const matchedKey = keys.find((k) => {
+            const ck = cleanKey(k);
+            return targetKeywords.some((target) => cleanKey(target) === ck);
+          });
           return matchedKey ? row[matchedKey] : undefined;
         };
 
@@ -442,10 +447,10 @@ export default function CatalogoPage() {
         const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
         const rawImagen = String(getVal(['imagen', 'foto', 'url', 'link', 'drive']) || '').trim();
 
-        // Mapeo preciso de la columna "estado compra"
         const estadoCompraVal = String(
           getVal([
             'estado compra',
+            'estadocompra',
             'estado_compra',
             'analiza_compras',
             'analizacompras',
@@ -471,7 +476,8 @@ export default function CatalogoPage() {
           return isNaN(num) ? 0 : num;
         };
 
-        if (ref) {
+        // Guardar SOLO si la referencia no está vacía
+        if (ref && ref !== '') {
           const productObj: any = {
             referencia: ref,
             descripcion: desc,
@@ -497,18 +503,19 @@ export default function CatalogoPage() {
       const total = productsToUpload.length;
 
       if (total === 0) {
-        throw new Error('No se encontraron productos con la columna REFERENCIA válida.');
+        throw new Error('No se encontraron productos válidos. Revisa que la columna "Referencia" tenga datos.');
       }
 
       setUploadStatus({ message: 'Limpiando catálogo anterior...' });
 
+      // Eliminar absolutamente todos los productos anteriores para no dejar fantasmas
       const { error: deleteError } = await supabase
         .from('products')
         .delete()
-        .neq('referencia', '');
+        .or('referencia.neq.XYZ123_DUMMY,referencia.is.null');
 
       if (deleteError) {
-        throw new Error(`Error al limpiar la base de datos: ${deleteError.message}`);
+        console.warn('Advertencia al limpiar la base de datos:', deleteError);
       }
 
       const BATCH_SIZE = 100;
