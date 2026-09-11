@@ -246,7 +246,6 @@ export default function CatalogoPage() {
         }
       }
 
-      // Filtrar productos descartando aquellos que no tengan referencia válida
       const validProducts = allProducts.filter(
         (p) => p && p.referencia && String(p.referencia).trim() !== ''
       );
@@ -307,19 +306,16 @@ export default function CatalogoPage() {
     }
   }, [isAuthenticated, fetchProducts]);
 
-  // Filtrado en memoria
   useEffect(() => {
     let result = products;
 
     result = result.filter((p) => {
       const existencia = Number(p.existencia) || 0;
 
-      // 1. Si la existencia es > 0, se muestra
       if (existencia > 0) {
         return true;
       }
 
-      // 2. Si es <= 0, revisar estado de compra
       let estadoCompraRaw = '';
 
       for (const k of Object.keys(p)) {
@@ -387,7 +383,6 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
-  // Carga Masiva Sanitizada
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -473,7 +468,6 @@ export default function CatalogoPage() {
           return isNaN(num) ? 0 : num;
         };
 
-        // Solo incluir si la referencia no está vacía
         if (ref && ref !== '') {
           const productObj: any = {
             referencia: ref,
@@ -504,7 +498,6 @@ export default function CatalogoPage() {
 
       setUploadStatus({ message: 'Limpiando catálogo anterior...' });
 
-      // Limpiar registros antiguos
       await supabase.from('products').delete().neq('referencia', '___DUMMY_NONE___');
 
       const BATCH_SIZE = 100;
@@ -517,7 +510,6 @@ export default function CatalogoPage() {
           .from('products')
           .upsert(batch, { onConflict: 'referencia' });
 
-        // Si la columna 'estado_compra' tampoco existe en Supabase, reintentar quitándola del objeto
         if (error && error.message && error.message.includes('estado_compra')) {
           const safeBatch = batch.map(({ estado_compra, ...rest }) => rest);
           const retry = await supabase
@@ -685,58 +677,84 @@ export default function CatalogoPage() {
       <style jsx global>{`
         @media print {
           @page {
-            margin: 15mm 10mm 15mm 10mm;
+            margin: 10mm 10mm 20mm 10mm;
           }
           body {
             background-color: #ffffff !important;
+            counter-reset: page;
           }
           .print-header {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
-            height: 60px;
+            height: 50px;
             display: flex !important;
             align-items: center;
-            justify-between;
+            justify-content: space-between;
             border-bottom: 2px solid #e2e8f0;
             background-color: white;
             z-index: 1000;
+            padding-bottom: 5px;
           }
           .print-footer {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
-            height: 30px;
+            height: 45px;
             display: flex !important;
             align-items: center;
-            justify-center;
-            border-top: 1px solid #e2e8f0;
+            justify-content: space-between;
+            border-top: 1.5px solid #cbd5e1;
             background-color: white;
             z-index: 1000;
+            padding-top: 5px;
+            font-size: 10px;
+          }
+          .print-page-number::after {
+            counter-increment: page;
+            content: "Página " counter(page);
           }
           .print-content-padding {
-            padding-top: 70px;
-            padding-bottom: 40px;
+            padding-top: 60px;
+            padding-bottom: 50px;
           }
         }
       `}</style>
 
+      {/* Encabezado para Imprimir / PDF */}
       <div className="hidden print-header">
-        <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-12 object-contain" />
+        <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-10 object-contain" />
         <div className="text-right">
-          <h2 className="text-base font-bold text-gray-900 tracking-tight">CATÁLOGO DE PRODUCTOS</h2>
-          <p className="text-[10px] text-gray-500 font-semibold uppercase">
+          <h2 className="text-sm font-bold text-gray-900 tracking-tight">CATÁLOGO DE PRODUCTOS</h2>
+          <p className="text-[9px] text-gray-500 font-semibold uppercase">
             Lista: {priceList.toUpperCase()} {selectedLine ? `| Línea: ${selectedLine}` : ''}
           </p>
         </div>
       </div>
 
+      {/* Pie de Página para Imprimir / PDF */}
       <div className="hidden print-footer">
-        <p className="text-xs font-bold text-gray-700 tracking-wider uppercase">
-          * PRECIOS NO INCLUYEN IVA *
-        </p>
+        <div className="flex items-center gap-2">
+          <img src="/logo-texcomercial.jpg" alt="Logo" className="h-7 object-contain" />
+          <span className="font-extrabold text-gray-800 text-[10px]">
+            * PRECIOS NO INCLUYEN IVA *
+          </span>
+        </div>
+
+        <div className="text-center font-medium text-gray-700">
+          <span>LÍNEA: </span>
+          <strong className="uppercase">{selectedLine || 'TODAS LAS LÍNEAS'}</strong>
+        </div>
+
+        <div className="text-right font-medium text-gray-700 flex flex-col items-end">
+          <div>
+            <span>Vendedor: </span>
+            <strong className="uppercase">{currentUserName}</strong>
+          </div>
+          <div className="print-page-number font-bold text-gray-500 text-[9px]"></div>
+        </div>
       </div>
 
       <div className="max-w-7xl mx-auto space-y-4 print-content-padding">
