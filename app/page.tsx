@@ -19,7 +19,6 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
-  analiza_compras?: string;
   estado_compra?: string;
   imagen?: string;
   [key: string]: any;
@@ -216,7 +215,6 @@ export default function CatalogoPage() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrImageUrl, setQrImageUrl] = useState('');
 
-  // Carga de productos desde Supabase descartando registros vacíos
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -248,7 +246,7 @@ export default function CatalogoPage() {
         }
       }
 
-      // Filtrar productos descartando aquellos que no tengan referencia
+      // Filtrar productos descartando aquellos que no tengan referencia válida
       const validProducts = allProducts.filter(
         (p) => p && p.referencia && String(p.referencia).trim() !== ''
       );
@@ -309,19 +307,19 @@ export default function CatalogoPage() {
     }
   }, [isAuthenticated, fetchProducts]);
 
-  // Lógica de filtrado en pantalla
+  // Filtrado en memoria
   useEffect(() => {
     let result = products;
 
     result = result.filter((p) => {
       const existencia = Number(p.existencia) || 0;
 
-      // 1. Si la existencia es mayor a 0, siempre se muestra
+      // 1. Si la existencia es > 0, se muestra
       if (existencia > 0) {
         return true;
       }
 
-      // 2. Si la existencia es 0 o menor, evaluar "estado compra"
+      // 2. Si es <= 0, revisar estado de compra
       let estadoCompraRaw = '';
 
       for (const k of Object.keys(p)) {
@@ -389,7 +387,7 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
-  // Carga masiva desde Excel con desinfección de nombres de columna
+  // Carga Masiva Sanitizada
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -423,13 +421,12 @@ export default function CatalogoPage() {
 
       const productsToUpload: any[] = [];
 
-      // Función limpiadora de nombres de columna
       const cleanKey = (str: string) =>
         str
           .toLowerCase()
           .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '') // Elimina tildes
-          .replace(/[^a-z0-9]/g, '');      // Deja solo letras y números
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]/g, '');
 
       rawData.forEach((row) => {
         const keys = Object.keys(row);
@@ -476,7 +473,7 @@ export default function CatalogoPage() {
           return isNaN(num) ? 0 : num;
         };
 
-        // Guardar SOLO si la referencia no está vacía
+        // Solo incluir si la referencia no está vacía
         if (ref && ref !== '') {
           const productObj: any = {
             referencia: ref,
@@ -488,8 +485,7 @@ export default function CatalogoPage() {
             pvp5: parsePrice(getVal(['pvp5', 'pvp 5', 'precio5'])),
             pvp6: parsePrice(getVal(['pvp6', 'pvp 6', 'precio6'])),
             existencia: existenciaFinal,
-            analiza_compras: estadoCompraVal,
-            estado_compra: estadoCompraVal,
+            estado_compra: estadoCompraVal
           };
 
           if (rawImagen) {
@@ -508,27 +504,29 @@ export default function CatalogoPage() {
 
       setUploadStatus({ message: 'Limpiando catálogo anterior...' });
 
-      // Eliminar absolutamente todos los productos anteriores para no dejar fantasmas
-      const { error: deleteError } = await supabase
-        .from('products')
-        .delete()
-        .or('referencia.neq.XYZ123_DUMMY,referencia.is.null');
-
-      if (deleteError) {
-        console.warn('Advertencia al limpiar la base de datos:', deleteError);
-      }
+      // Limpiar registros antiguos
+      await supabase.from('products').delete().neq('referencia', '___DUMMY_NONE___');
 
       const BATCH_SIZE = 100;
       let processed = 0;
 
       for (let i = 0; i < total; i += BATCH_SIZE) {
-        const batch = productsToUpload.slice(i, i + BATCH_SIZE);
+        let batch = productsToUpload.slice(i, i + BATCH_SIZE);
 
-        const { error } = await supabase
+        let { error } = await supabase
           .from('products')
           .upsert(batch, { onConflict: 'referencia' });
 
-        if (error) throw new Error(error.message);
+        // Si la columna 'estado_compra' tampoco existe en Supabase, reintentar quitándola del objeto
+        if (error && error.message && error.message.includes('estado_compra')) {
+          const safeBatch = batch.map(({ estado_compra, ...rest }) => rest);
+          const retry = await supabase
+            .from('products')
+            .upsert(safeBatch, { onConflict: 'referencia' });
+          if (retry.error) throw new Error(retry.error.message);
+        } else if (error) {
+          throw new Error(error.message);
+        }
 
         processed += batch.length;
         setUploadStatus({ message: `Cargando... ${processed} de ${total} productos.` });
