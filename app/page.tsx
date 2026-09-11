@@ -19,7 +19,8 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
-  analiza_compras?: string; // Campo para evaluar la condición de compras
+  analiza_compras?: string;
+  estado_compra?: string;
   imagen?: string;
   [key: string]: any;
 }
@@ -256,7 +257,6 @@ export default function CatalogoPage() {
     }
   }, []);
 
-  // Suscripción en Tiempo Real
   useEffect(() => {
     const channel = supabase
       .channel('schema-db-changes')
@@ -302,37 +302,39 @@ export default function CatalogoPage() {
   }, [isAuthenticated, fetchProducts]);
 
   // ==========================================
-  // EFFECT DE FILTRADO CON LA NUEVA LÓGICA
+  // LÓGICA DE FILTRADO CORREGIDA
   // ==========================================
   useEffect(() => {
     let result = products;
 
-    // Regla de Existencia y Análisis de Compras:
-    // 1. Si la existencia es > 0, SIEMPRE se muestra en el catálogo.
-    // 2. Si la existencia es 0:
-    //    - Se muestra si 'analiza_compras' incluye "SI" (SI - SI SE ANALIZA PARA COMPRAS).
-    //    - Se oculta si 'analiza_compras' incluye "NO" (NO - NO SE ANALIZA PARA COMPRAS).
     result = result.filter((p) => {
       const existencia = Number(p.existencia) || 0;
 
-      // Si tiene stock > 0, se muestra siempre
+      // 1. Si el stock es mayor a 0, SIEMPRE se muestra
       if (existencia > 0) {
         return true;
       }
 
-      // Si la existencia es <= 0, verificar el campo analiza_compras
-      const analizaComprasStr = String(p.analiza_compras || p.analizaCompras || p['analiza compras'] || '').toUpperCase();
+      // 2. Si la existencia es 0, evalúa los nombres posibles de la columna
+      const analizaComprasStr = String(
+        p.estado_compra ||
+        p['estado compra'] ||
+        p.analiza_compras || 
+        p.analizaCompras || 
+        p['analiza compras'] || 
+        ''
+      ).toUpperCase();
 
-      // Muestra solo si explícitamente se analiza para compras
+      // Muestra si el texto incluye "SI"
       return analizaComprasStr.includes('SI');
     });
 
-    // Filtro por Línea seleccionada
+    // Filtro por línea
     if (selectedLine) {
       result = result.filter((p) => p.linea === selectedLine);
     }
 
-    // Filtro por búsqueda de texto
+    // Filtro por término de búsqueda
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
       result = result.filter(
@@ -369,6 +371,9 @@ export default function CatalogoPage() {
     setPasswordInput('');
   };
 
+  // ==========================================
+  // CARGA DE ARCHIVO CORREGIDA (Lectura de "estado compra")
+  // ==========================================
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (currentUserRole !== 'admin') {
@@ -417,7 +422,19 @@ export default function CatalogoPage() {
         const desc = String(getVal(['descripcion', 'desc', 'nombre', 'producto']) || '').trim();
         const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
         const rawImagen = String(getVal(['imagen', 'foto', 'url', 'link', 'drive']) || '').trim();
-        const analizaCompras = String(getVal(['analiza_compras', 'analizacompras', 'analiza compras', 'compras']) || '').trim();
+
+        // Mapeo exhaustivo para detectar "estado compra"
+        const analizaCompras = String(
+          getVal([
+            'estado compra',
+            'estado_compra',
+            'analiza_compras',
+            'analizacompras',
+            'analiza compras',
+            'compras',
+            'estado'
+          ]) || ''
+        ).trim();
 
         const rawExistencia = getVal(['existencia', 'existencias', 'stock', 'cant', 'cantidad']);
         let existenciaFinal = 0;
@@ -447,6 +464,7 @@ export default function CatalogoPage() {
             pvp6: parsePrice(getVal(['pvp6', 'pvp 6', 'precio6'])),
             existencia: existenciaFinal,
             analiza_compras: analizaCompras,
+            estado_compra: analizaCompras,
           };
 
           if (rawImagen) {
@@ -526,7 +544,6 @@ export default function CatalogoPage() {
     setShowQRModal(true);
   };
 
-  // VISTA PÚBLICA (MODO QR)
   if (isQRView) {
     return (
       <div className="min-h-screen bg-[#f8fafc] p-4 md:p-6">
@@ -584,7 +601,6 @@ export default function CatalogoPage() {
     );
   }
 
-  // LOGIN SI NO ESTÁ AUTENTICADO
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0b132b] flex items-center justify-center p-4">
@@ -640,7 +656,6 @@ export default function CatalogoPage() {
     );
   }
 
-  // VISTA PANEL VENDEDOR / ADMIN
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-800 p-4 md:p-6 print:bg-white print:p-0">
       <style jsx global>{`
@@ -814,7 +829,6 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        {/* GRILLA DE PRODUCTOS */}
         {!loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3">
             {filteredProducts.map((p) => (
@@ -831,7 +845,6 @@ export default function CatalogoPage() {
         )}
       </div>
 
-      {/* MODAL CÓDIGO QR */}
       {showQRModal && (
         <div
           className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
@@ -880,7 +893,6 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* MODAL VISTA PREVIA IMAGEN */}
       {previewImage && (
         <div
           className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
