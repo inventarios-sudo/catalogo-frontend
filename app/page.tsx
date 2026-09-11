@@ -302,7 +302,7 @@ export default function CatalogoPage() {
   }, [isAuthenticated, fetchProducts]);
 
   // ==========================================
-  // LÓGICA DE FILTRADO CORREGIDA
+  // FILTRADO ESTRICTO DE EXISTENCIAS Y COMPRAS
   // ==========================================
   useEffect(() => {
     let result = products;
@@ -310,31 +310,50 @@ export default function CatalogoPage() {
     result = result.filter((p) => {
       const existencia = Number(p.existencia) || 0;
 
-      // 1. Si el stock es mayor a 0, SIEMPRE se muestra
+      // 1. Si la existencia es mayor a 0, se muestra en el catálogo
       if (existencia > 0) {
         return true;
       }
 
-      // 2. Si la existencia es 0, evalúa los nombres posibles de la columna
-      const analizaComprasStr = String(
-        p.estado_compra ||
-        p['estado compra'] ||
-        p.analiza_compras || 
-        p.analizaCompras || 
-        p['analiza compras'] || 
-        ''
-      ).toUpperCase();
+      // 2. Si la existencia es 0 o menor, extraer el valor del estado de compra
+      let estadoCompraRaw = '';
 
-      // Muestra si el texto incluye "SI"
-      return analizaComprasStr.includes('SI');
+      for (const k of Object.keys(p)) {
+        const keyLower = k.toLowerCase().trim();
+        if (
+          keyLower === 'estado compra' ||
+          keyLower === 'estado_compra' ||
+          keyLower === 'analiza_compras' ||
+          keyLower === 'analiza compras' ||
+          keyLower === 'compras'
+        ) {
+          if (p[k]) {
+            estadoCompraRaw = String(p[k]).toUpperCase().trim();
+            break;
+          }
+        }
+      }
+
+      // Si explícitamente dice "NO", NO se muestra
+      if (estadoCompraRaw.startsWith('NO') || estadoCompraRaw.includes('NO -')) {
+        return false;
+      }
+
+      // Si explícitamente dice "SI", SÍ se muestra
+      if (estadoCompraRaw.startsWith('SI') || estadoCompraRaw.includes('SI -')) {
+        return true;
+      }
+
+      // Caso por defecto cuando la existencia es 0 y no se especifica "SI": Ocultar
+      return false;
     });
 
-    // Filtro por línea
+    // Filtro por Línea seleccionada
     if (selectedLine) {
       result = result.filter((p) => p.linea === selectedLine);
     }
 
-    // Filtro por término de búsqueda
+    // Filtro por búsqueda de texto
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
       result = result.filter(
@@ -372,7 +391,7 @@ export default function CatalogoPage() {
   };
 
   // ==========================================
-  // CARGA DE ARCHIVO CORREGIDA (Lectura de "estado compra")
+  // CARGA Y PROCESAMIENTO MASIVO DE EXCEL / CSV
   // ==========================================
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -412,7 +431,7 @@ export default function CatalogoPage() {
         const getVal = (possibleNames: string[]) => {
           const matchedKey = keys.find((k) =>
             possibleNames.some(
-              (name) => name.toLowerCase() === k.trim().toLowerCase()
+              (name) => name.toLowerCase().trim() === k.trim().toLowerCase()
             )
           );
           return matchedKey ? row[matchedKey] : undefined;
@@ -423,8 +442,8 @@ export default function CatalogoPage() {
         const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
         const rawImagen = String(getVal(['imagen', 'foto', 'url', 'link', 'drive']) || '').trim();
 
-        // Mapeo exhaustivo para detectar "estado compra"
-        const analizaCompras = String(
+        // Mapeo preciso de la columna "estado compra"
+        const estadoCompraVal = String(
           getVal([
             'estado compra',
             'estado_compra',
@@ -434,7 +453,7 @@ export default function CatalogoPage() {
             'compras',
             'estado'
           ]) || ''
-        ).trim();
+        ).trim().toUpperCase();
 
         const rawExistencia = getVal(['existencia', 'existencias', 'stock', 'cant', 'cantidad']);
         let existenciaFinal = 0;
@@ -463,8 +482,8 @@ export default function CatalogoPage() {
             pvp5: parsePrice(getVal(['pvp5', 'pvp 5', 'precio5'])),
             pvp6: parsePrice(getVal(['pvp6', 'pvp 6', 'precio6'])),
             existencia: existenciaFinal,
-            analiza_compras: analizaCompras,
-            estado_compra: analizaCompras,
+            analiza_compras: estadoCompraVal,
+            estado_compra: estadoCompraVal,
           };
 
           if (rawImagen) {
@@ -510,7 +529,7 @@ export default function CatalogoPage() {
 
       setUploadStatus({ 
         success: true, 
-        message: `¡Éxito! Se actualizaron correctamente los ${total} productos e imágenes.` 
+        message: `¡Éxito! Se actualizaron correctamente los ${total} productos.` 
       });
 
       setSelectedLine('');
