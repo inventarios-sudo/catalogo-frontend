@@ -19,6 +19,7 @@ interface Product {
   pvp5: number;
   pvp6: number;
   existencia: number;
+  empaque?: string;
   estado_compra?: string;
   imagen?: string;
   [key: string]: any;
@@ -141,6 +142,7 @@ function ProductCard({
   onImageClick: (url: string) => void;
 }) {
   const price = product[priceList] || 0;
+  const empaque = product.empaque || product['empaque'] || '';
 
   return (
     <div className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid print:shadow-none print:border-gray-300">
@@ -160,8 +162,13 @@ function ProductCard({
           <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
             {product.descripcion || 'SIN DESCRIPCIÓN'}
           </h3>
-          <div className="text-[11px] text-gray-500 mb-3">
-            Ref: <span className="font-mono font-bold text-gray-800">{product.referencia}</span>
+          <div className="flex items-center justify-between text-[11px] text-gray-500 mb-3">
+            <span>Ref: <span className="font-mono font-bold text-gray-800">{product.referencia}</span></span>
+            {empaque && (
+              <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-extrabold border border-blue-100">
+                Emp: {empaque}
+              </span>
+            )}
           </div>
         </div>
 
@@ -437,6 +444,7 @@ export default function CatalogoPage() {
         const ref = String(getVal(['referencia', 'ref', 'codigo']) || '').trim();
         const desc = String(getVal(['descripcion', 'desc', 'nombre', 'producto']) || '').trim();
         const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
+        const empaqueVal = String(getVal(['empaque', 'presentacion', 'empaques']) || '').trim();
         const rawImagen = String(getVal(['imagen', 'foto', 'url', 'link', 'drive']) || '').trim();
 
         const estadoCompraVal = String(
@@ -473,6 +481,7 @@ export default function CatalogoPage() {
             referencia: ref,
             descripcion: desc,
             linea: linea,
+            empaque: empaqueVal,
             pvp1: parsePrice(getVal(['pvp1', 'pvp 1', 'precio1'])),
             pvp3: parsePrice(getVal(['pvp3', 'pvp 3', 'precio3'])),
             pvp4: parsePrice(getVal(['pvp4', 'pvp 4', 'precio4'])),
@@ -510,14 +519,18 @@ export default function CatalogoPage() {
           .from('products')
           .upsert(batch, { onConflict: 'referencia' });
 
-        if (error && error.message && error.message.includes('estado_compra')) {
-          const safeBatch = batch.map(({ estado_compra, ...rest }) => rest);
+        // Si la columna 'empaque' o 'estado_compra' no existen dinámicamente en Supabase, reintentar quitándolas
+        if (error && error.message) {
+          if (error.message.includes('empaque')) {
+            batch = batch.map(({ empaque, ...rest }) => rest);
+          }
+          if (error.message.includes('estado_compra')) {
+            batch = batch.map(({ estado_compra, ...rest }) => rest);
+          }
           const retry = await supabase
             .from('products')
-            .upsert(safeBatch, { onConflict: 'referencia' });
+            .upsert(batch, { onConflict: 'referencia' });
           if (retry.error) throw new Error(retry.error.message);
-        } else if (error) {
-          throw new Error(error.message);
         }
 
         processed += batch.length;
@@ -723,7 +736,7 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* Encabezado para Imprimir / PDF */}
+      {/* Encabezado PDF */}
       <div className="hidden print-header">
         <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-10 object-contain" />
         <div className="text-right">
@@ -734,7 +747,7 @@ export default function CatalogoPage() {
         </div>
       </div>
 
-      {/* Pie de Página para Imprimir / PDF */}
+      {/* Pie de Página PDF */}
       <div className="hidden print-footer">
         <div className="flex items-center gap-2">
           <img src="/logo-texcomercial.jpg" alt="Logo" className="h-7 object-contain" />
