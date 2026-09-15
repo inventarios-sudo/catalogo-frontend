@@ -142,7 +142,18 @@ function ProductCard({
   onImageClick: (url: string) => void;
 }) {
   const price = product[priceList] || 0;
-  const empaque = product.empaque || product['empaque'] || '';
+
+  // Búsqueda exhaustiva del valor de Empaque en el objeto del producto
+  let empaqueVal = '';
+  for (const k of Object.keys(product)) {
+    const keyClean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (keyClean === 'empaque' || keyClean === 'empaques' || keyClean === 'presentacion') {
+      if (product[k] !== undefined && product[k] !== null && String(product[k]).trim() !== '') {
+        empaqueVal = String(product[k]).trim();
+        break;
+      }
+    }
+  }
 
   return (
     <div className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid print:shadow-none print:border-gray-300">
@@ -162,11 +173,13 @@ function ProductCard({
           <h3 className="text-xs font-bold text-gray-900 line-clamp-2 uppercase leading-snug mb-1">
             {product.descripcion || 'SIN DESCRIPCIÓN'}
           </h3>
-          <div className="flex items-center justify-between text-[11px] text-gray-500 mb-3">
-            <span>Ref: <span className="font-mono font-bold text-gray-800">{product.referencia}</span></span>
-            {empaque && (
-              <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-extrabold border border-blue-100">
-                Emp: {empaque}
+          <div className="flex items-center justify-between gap-1 text-[11px] text-gray-500 mb-3">
+            <span className="truncate">
+              Ref: <span className="font-mono font-bold text-gray-800">{product.referencia}</span>
+            </span>
+            {empaqueVal && (
+              <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-extrabold border border-blue-200 shrink-0">
+                Emp: {empaqueVal}
               </span>
             )}
           </div>
@@ -519,7 +532,6 @@ export default function CatalogoPage() {
           .from('products')
           .upsert(batch, { onConflict: 'referencia' });
 
-        // Si la columna 'empaque' o 'estado_compra' no existen dinámicamente en Supabase, reintentar quitándolas
         if (error && error.message) {
           if (error.message.includes('empaque')) {
             batch = batch.map(({ empaque, ...rest }) => rest);
@@ -704,7 +716,7 @@ export default function CatalogoPage() {
             height: 50px;
             display: flex !important;
             align-items: center;
-            justify-content: space-between;
+            justify-between;
             border-bottom: 2px solid #e2e8f0;
             background-color: white;
             z-index: 1000;
@@ -718,7 +730,7 @@ export default function CatalogoPage() {
             height: 45px;
             display: flex !important;
             align-items: center;
-            justify-content: space-between;
+            justify-between;
             border-top: 1.5px solid #cbd5e1;
             background-color: white;
             z-index: 1000;
