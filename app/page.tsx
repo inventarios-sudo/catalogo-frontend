@@ -931,7 +931,7 @@ export default function CatalogoPage() {
             <div>
               <h3 className="text-lg font-bold text-gray-900">Código QR Generado</h3>
               <p className="text-xs text-gray-500 mt-1">
-                Catalogo Digital Texcomercial.
+                Catalogo Digital TEXCOMERCIAL S.A
               </p>
             </div>
 
