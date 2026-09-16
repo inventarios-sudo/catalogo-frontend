@@ -701,7 +701,8 @@ export default function CatalogoPage() {
       <style jsx global>{`
         @media print {
           @page {
-            margin: 10mm 10mm 20mm 10mm;
+            size: portrait;
+            margin: 12mm 10mm 15mm 10mm;
           }
           body {
             background-color: #ffffff !important;
@@ -712,28 +713,29 @@ export default function CatalogoPage() {
             top: 0;
             left: 0;
             right: 0;
-            height: 50px;
+            height: 45px;
             display: flex !important;
             align-items: center;
-            justify-between;
+            justify-content: space-between;
             border-bottom: 2px solid #e2e8f0;
             background-color: white;
             z-index: 1000;
-            padding-bottom: 5px;
+            padding-bottom: 6px;
           }
           .print-footer {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
-            height: 45px;
+            height: 40px;
             display: flex !important;
             align-items: center;
             justify-content: space-between;
             border-top: 1.5px solid #cbd5e1;
             background-color: white;
             z-index: 1000;
-            padding-top: 5px;
+            padding-top: 6px;
+            padding-right: 24px;
             font-size: 10px;
           }
           .print-page-number::after {
@@ -741,39 +743,38 @@ export default function CatalogoPage() {
             content: "Página " counter(page);
           }
           .print-content-padding {
-            padding-top: 60px;
-            padding-bottom: 50px;
+            padding-top: 55px;
+            padding-bottom: 45px;
           }
         }
       `}</style>
 
-      {/* Encabezado PDF */}
+      {/* Encabezado PDF (Superior) */}
       <div className="hidden print-header">
-        <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-10 object-contain" />
+        <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-9 object-contain" />
         <div className="text-right">
-          <h2 className="text-sm font-bold text-gray-900 tracking-tight">CATÁLOGO DE PRODUCTOS</h2>
-          <p className="text-[9px] text-gray-500 font-semibold uppercase">
-            Lista: {priceList.toUpperCase()} {selectedLine ? `| Línea: ${selectedLine}` : ''}
-          </p>
+          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">LÍNEA SELECCIONADA</span>
+          <h2 className="text-xs font-black text-gray-900 tracking-tight uppercase">
+            {selectedLine || 'TODAS LAS LÍNEAS'}
+          </h2>
         </div>
       </div>
 
-      {/* Pie de Página PDF */}
+      {/* Pie de Página PDF (Inferior) */}
       <div className="hidden print-footer">
-        <div className="flex items-center gap-2">
-          <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-7 object-contain" />
-          <span className="font-extrabold text-gray-800 text-[10px]">
+        <div className="w-1/3 text-left">
+          <span className="text-[9px] text-gray-400 font-bold block">LISTA DE PRECIOS</span>
+          <span className="font-extrabold text-gray-700 text-[10px] uppercase">{priceList}</span>
+        </div>
+
+        <div className="w-1/3 text-center">
+          <span className="font-black text-gray-900 text-[10px] tracking-wide">
             * PRECIOS NO INCLUYEN IVA *
           </span>
         </div>
 
-        <div className="text-center font-medium text-gray-700">
-          <span>LÍNEA: </span>
-          <strong className="uppercase">{selectedLine || 'TODAS LAS LÍNEAS'}</strong>
-        </div>
-
-        <div className="text-right font-medium text-gray-700 flex flex-col items-end">
-          <div>
+        <div className="w-1/3 text-right font-medium text-gray-700 flex flex-col items-end">
+          <div className="text-[10px]">
             <span>Vendedor: </span>
             <strong className="uppercase">{currentUserName}</strong>
           </div>
