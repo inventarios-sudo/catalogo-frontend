@@ -20,6 +20,7 @@ interface Product {
   pvp6: number;
   existencia: number;
   empaque?: string;
+  um?: string;
   estado_compra?: string;
   imagen?: string;
   [key: string]: any;
@@ -154,6 +155,17 @@ function ProductCard({
     }
   }
 
+  let umVal = 'UND';
+  for (const k of Object.keys(product)) {
+    const keyClean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (keyClean === 'um' || keyClean === 'unidad' || keyClean === 'unidadmedida') {
+      if (product[k] !== undefined && product[k] !== null && String(product[k]).trim() !== '') {
+        umVal = String(product[k]).trim().toUpperCase();
+        break;
+      }
+    }
+  }
+
   return (
     <div className="bg-white border border-gray-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm print:break-inside-avoid print:shadow-none print:border-gray-300">
       <div className="w-full h-44 bg-gray-50/70 rounded-xl overflow-hidden mb-3 flex items-center justify-center p-2 print:bg-white">
@@ -197,7 +209,7 @@ function ProductCard({
           <div className="text-right">
             <div className="text-[9px] text-gray-400 font-bold uppercase">STOCK</div>
             <div className={`text-xs font-bold ${Number(product.existencia) > 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {product.existencia ?? 0} und
+              {product.existencia ?? 0} {umVal}
             </div>
           </div>
         </div>
@@ -457,6 +469,7 @@ export default function CatalogoPage() {
         const desc = String(getVal(['descripcion', 'desc', 'nombre', 'producto']) || '').trim();
         const linea = String(getVal(['linea', 'categoria', 'familia']) || '').trim();
         const empaqueVal = String(getVal(['empaque', 'presentacion', 'empaques']) || '').trim();
+        const umVal = String(getVal(['u.m', 'um', 'unidad', 'unidad de medida', 'unidadmedida']) || '').trim();
         const rawImagen = String(getVal(['imagen', 'foto', 'url', 'link', 'drive']) || '').trim();
 
         const estadoCompraVal = String(
@@ -494,6 +507,7 @@ export default function CatalogoPage() {
             descripcion: desc,
             linea: linea,
             empaque: empaqueVal,
+            um: umVal,
             pvp1: parsePrice(getVal(['pvp1', 'pvp 1', 'precio1'])),
             pvp3: parsePrice(getVal(['pvp3', 'pvp 3', 'precio3'])),
             pvp4: parsePrice(getVal(['pvp4', 'pvp 4', 'precio4'])),
@@ -534,6 +548,9 @@ export default function CatalogoPage() {
         if (error && error.message) {
           if (error.message.includes('empaque')) {
             batch = batch.map(({ empaque, ...rest }) => rest);
+          }
+          if (error.message.includes('um')) {
+            batch = batch.map(({ um, ...rest }) => rest);
           }
           if (error.message.includes('estado_compra')) {
             batch = batch.map(({ estado_compra, ...rest }) => rest);
@@ -649,7 +666,7 @@ export default function CatalogoPage() {
             <div className="mx-auto w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
               <span className="text-2xl">🔒</span>
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Catálogo TEXCOMERCIAL S.A</h1>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Acceso al Catálogo</h1>
             <p className="text-xs text-blue-100 mt-1">Ingresa tus credenciales autorizadas</p>
           </div>
 
@@ -931,7 +948,7 @@ export default function CatalogoPage() {
             <div>
               <h3 className="text-lg font-bold text-gray-900">Código QR Generado</h3>
               <p className="text-xs text-gray-500 mt-1">
-                CATALOGO DIGITAL TEXCOMERCIAL S.A
+                Al escanear, el cliente verá únicamente la línea y opción configurada.
               </p>
             </div>
 
