@@ -143,7 +143,6 @@ function ProductCard({
 }) {
   const price = product[priceList] || 0;
 
-  // Búsqueda exhaustiva del valor de Empaque en el objeto del producto
   let empaqueVal = '';
   for (const k of Object.keys(product)) {
     const keyClean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -730,7 +729,7 @@ export default function CatalogoPage() {
             height: 45px;
             display: flex !important;
             align-items: center;
-            justify-between;
+            justify-content: space-between;
             border-top: 1.5px solid #cbd5e1;
             background-color: white;
             z-index: 1000;
@@ -762,7 +761,7 @@ export default function CatalogoPage() {
       {/* Pie de Página PDF */}
       <div className="hidden print-footer">
         <div className="flex items-center gap-2">
-          <img src="/logo-texcomercial.jpg" alt="Logo" className="h-7 object-contain" />
+          <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-7 object-contain" />
           <span className="font-extrabold text-gray-800 text-[10px]">
             * PRECIOS NO INCLUYEN IVA *
           </span>
@@ -931,7 +930,7 @@ export default function CatalogoPage() {
             <div>
               <h3 className="text-lg font-bold text-gray-900">Código QR Generado</h3>
               <p className="text-xs text-gray-500 mt-1">
-                Catalogo Digital TEXCOMERCIAL S.A
+                Al escanear, el cliente verá únicamente la línea y opción configurada.
               </p>
             </div>
 
