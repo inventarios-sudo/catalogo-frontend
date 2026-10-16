@@ -102,14 +102,11 @@ function ProductImage({
 
   if (hasError || !currentSrc) {
     return (
-      <div className="w-full h-full flex items-center justify-center p-3 bg-gray-50/50 rounded-xl">
+      <div className="w-full h-full flex items-center justify-center p-3 bg-white rounded-xl">
         <img
           src="/logo-placeholder.png"
           alt="Texcomercial"
           className="max-h-full max-w-full object-contain"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none';
-          }}
         />
       </div>
     );
