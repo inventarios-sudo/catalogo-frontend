@@ -52,29 +52,22 @@ function resolveImageUrl(product: Product, bucketName: string): string[] {
     }
   }
 
-  if (foundUrl.includes('drive.google.com') || foundUrl.includes('docs.google.com')) {
-    const match = foundUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || foundUrl.match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      const fileId = match[1];
-      return [
-        `https://lh3.googleusercontent.com/d/${fileId}`,
-        `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`,
-        `https://drive.google.com/uc?export=view&id=${fileId}`
-      ];
-    }
-  }
-
   if (foundUrl) {
+    if (foundUrl.includes('drive.google.com') || foundUrl.includes('docs.google.com')) {
+      const match = foundUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || foundUrl.match(/id=([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        const fileId = match[1];
+        return [
+          `https://lh3.googleusercontent.com/d/${fileId}`,
+          `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`,
+          `https://drive.google.com/uc?export=view&id=${fileId}`
+        ];
+      }
+    }
     return [foundUrl];
   }
 
-  const cleanRef = (product.referencia || '').trim().replace(/\//g, '_');
-  return [
-    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpg`,
-    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.png`,
-    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.jpeg`,
-    `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${cleanRef}.JPG`
-  ];
+  return [];
 }
 
 function ProductImage({ 
@@ -94,7 +87,7 @@ function ProductImage({
     const urls = resolveImageUrl(product, bucketName);
     setCandidateUrls(urls);
     setCurrentIndex(0);
-    setHasError(false);
+    setHasError(urls.length === 0);
   }, [product, bucketName]);
 
   const handleError = () => {
@@ -109,11 +102,14 @@ function ProductImage({
 
   if (hasError || !currentSrc) {
     return (
-      <div className="w-full h-full flex items-center justify-center p-2 bg-gray-50/50 rounded-xl">
+      <div className="w-full h-full flex items-center justify-center p-3 bg-gray-50/50 rounded-xl">
         <img
           src="/logo-placeholder.png"
           alt="Texcomercial"
           className="max-h-full max-w-full object-contain"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
         />
       </div>
     );
@@ -448,7 +444,7 @@ export default function CatalogoPage() {
         throw new Error('El archivo está vacío.');
       }
 
-      // Uso de Map para filtrar referencias duplicadas
+      // Map para depurar las referencias duplicadas del Excel/CSV
       const uniqueProductsMap = new Map<string, any>();
 
       const cleanKey = (str: string) =>
