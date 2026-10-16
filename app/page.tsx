@@ -81,29 +81,29 @@ function ProductImage({
 }) {
   const [candidateUrls, setCandidateUrls] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [useFallbackLogo, setUseFallbackLogo] = useState<boolean>(false);
+  const [useFallback, setUseFallback] = useState<boolean>(false);
 
   useEffect(() => {
     const urls = resolveImageUrl(product, bucketName);
     setCandidateUrls(urls);
     setCurrentIndex(0);
-    setUseFallbackLogo(urls.length === 0);
+    setUseFallback(urls.length === 0);
   }, [product, bucketName]);
 
   const handleError = () => {
     if (currentIndex + 1 < candidateUrls.length) {
       setCurrentIndex((prev) => prev + 1);
     } else {
-      setUseFallbackLogo(true);
+      setUseFallback(true);
     }
   };
 
-  if (useFallbackLogo) {
+  if (useFallback) {
     return (
-      <div className="w-full h-full flex items-center justify-center p-3 bg-white rounded-xl">
+      <div className="w-full h-full flex items-center justify-center p-2 bg-white rounded-xl overflow-hidden">
         <img
           src="/logo-placeholder.png"
-          alt="Texcomercial"
+          alt=""
           className="max-h-full max-w-full object-contain"
         />
       </div>
@@ -115,7 +115,7 @@ function ProductImage({
   return (
     <img
       src={currentSrc}
-      alt="Producto"
+      alt=""
       onError={handleError}
       onClick={() => onImageClick(currentSrc)}
       className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
