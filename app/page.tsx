@@ -109,9 +109,12 @@ function ProductImage({
 
   if (hasError || !currentSrc) {
     return (
-      <div className="text-center p-2">
-        <span className="text-2xl">🖼️</span>
-        <p className="text-[10px] font-semibold text-gray-400 mt-1">Sin Imagen</p>
+      <div className="w-full h-full flex items-center justify-center p-2 bg-gray-50/50 rounded-xl">
+        <img
+          src="/logo-placeholder.png"
+          alt="Texcomercial"
+          className="max-h-full max-w-full object-contain"
+        />
       </div>
     );
   }
@@ -445,7 +448,8 @@ export default function CatalogoPage() {
         throw new Error('El archivo está vacío.');
       }
 
-      const productsToUpload: any[] = [];
+      // Uso de Map para filtrar referencias duplicadas
+      const uniqueProductsMap = new Map<string, any>();
 
       const cleanKey = (str: string) =>
         str
@@ -521,10 +525,11 @@ export default function CatalogoPage() {
             productObj.imagen = rawImagen;
           }
 
-          productsToUpload.push(productObj);
+          uniqueProductsMap.set(ref, productObj);
         }
       });
 
+      const productsToUpload = Array.from(uniqueProductsMap.values());
       const total = productsToUpload.length;
 
       if (total === 0) {
@@ -650,6 +655,7 @@ export default function CatalogoPage() {
                 alt="Vista previa" 
                 className="w-full h-auto max-h-[80vh] object-contain rounded-xl"
                 referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
               />
             </div>
           </div>
@@ -766,7 +772,7 @@ export default function CatalogoPage() {
         }
       `}</style>
 
-      {/* Encabezado PDF (Superior) */}
+      {/* Encabezado PDF */}
       <div className="hidden print-header">
         <img src="/logo-texcomercial.jpg" alt="Texcomercial" className="h-9 object-contain" />
         <div className="text-right">
@@ -777,7 +783,7 @@ export default function CatalogoPage() {
         </div>
       </div>
 
-      {/* Pie de Página PDF (Inferior) */}
+      {/* Pie de Página PDF */}
       <div className="hidden print-footer">
         <div className="w-1/3 text-left">
           <span className="text-[9px] text-gray-400 font-bold block">LISTA DE PRECIOS</span>
@@ -891,21 +897,21 @@ export default function CatalogoPage() {
 
               <button
                 onClick={handleGenerateQR}
-                className="bg-[#0284c7] hover:bg-sky-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors flex items-center gap-1"
+                className="bg-[#0284c7] hover:bg-sky-700 text-white font-bold text-xs px-3 py-2 rounded-xl shadow-sm"
               >
                 📱 Generar QR
               </button>
 
               <button
                 onClick={() => window.print()}
-                className="bg-[#ef4444] hover:bg-red-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-colors"
+                className="bg-red-500 hover:bg-red-600 text-white font-bold text-xs px-3 py-2 rounded-xl shadow-sm"
               >
                 🚩 PDF
               </button>
 
               <button
                 onClick={handleLogout}
-                className="bg-[#1e293b] text-white font-bold text-xs px-3.5 py-2 rounded-xl"
+                className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-3 py-2 rounded-xl shadow-sm"
               >
                 🚪 Salir
               </button>
@@ -913,8 +919,11 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        {!loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 print:grid-cols-3">
+        {/* Muestra de catálogo */}
+        {loading ? (
+          <div className="text-center py-20 text-gray-400 text-sm font-semibold">Cargando catálogo...</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredProducts.map((p) => (
               <ProductCard
                 key={p.referencia}
@@ -929,47 +938,22 @@ export default function CatalogoPage() {
         )}
       </div>
 
+      {/* Modal QR */}
       {showQRModal && (
-        <div
-          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
-          onClick={() => setShowQRModal(false)}
-        >
-          <div
-            className="bg-white rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl relative space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-xl">
+            <h3 className="text-base font-extrabold text-gray-900 uppercase">
+              QR del Catálogo Público
+            </h3>
+            <p className="text-xs text-gray-500">
+              Escanea para ver la línea: <strong>{selectedLine || 'Todas'}</strong>
+            </p>
+            {qrImageUrl && (
+              <img src={qrImageUrl} alt="Código QR" className="mx-auto w-48 h-48 rounded-lg border" />
+            )}
             <button
               onClick={() => setShowQRModal(false)}
-              className="absolute top-4 right-4 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm"
-            >
-              ✕
-            </button>
-
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Código QR Generado</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                CATALOGO DIGITAL TEXCOMERCIAL S.A.
-              </p>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-2xl flex items-center justify-center border border-gray-100">
-              <img src={qrImageUrl} alt="Código QR" className="w-48 h-48 rounded-lg" />
-            </div>
-
-            <div className="text-left bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 space-y-1">
-              <div><strong>Línea:</strong> {selectedLine || 'Todas las Líneas'}</div>
-              <div><strong>Lista:</strong> {priceList.toUpperCase()}</div>
-              <div>
-                <strong>Ver Precios:</strong>{' '}
-                <span className={showPrices ? 'text-green-700 font-bold' : 'text-red-600 font-bold'}>
-                  {showPrices ? 'SÍ' : 'NO'}
-                </span>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowQRModal(false)}
-              className="w-full bg-[#0284c7] hover:bg-sky-700 text-white font-bold py-2.5 rounded-xl text-xs"
+              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 rounded-xl text-xs"
             >
               Cerrar
             </button>
@@ -977,9 +961,10 @@ export default function CatalogoPage() {
         </div>
       )}
 
+      {/* Modal Previsualización de Imagen */}
       {previewImage && (
         <div
-          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 print:hidden"
+          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4"
           onClick={() => setPreviewImage(null)}
         >
           <div className="relative max-w-2xl w-full bg-white rounded-2xl p-2 shadow-2xl">
@@ -994,6 +979,7 @@ export default function CatalogoPage() {
               alt="Vista previa" 
               className="w-full h-auto max-h-[80vh] object-contain rounded-xl"
               referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
             />
           </div>
         </div>
