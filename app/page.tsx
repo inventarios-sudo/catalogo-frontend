@@ -81,30 +81,37 @@ function ProductImage({
 }) {
   const [candidateUrls, setCandidateUrls] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [useFallback, setUseFallback] = useState<boolean>(false);
+  const [useFallbackLogo, setUseFallbackLogo] = useState<boolean>(false);
 
   useEffect(() => {
     const urls = resolveImageUrl(product, bucketName);
     setCandidateUrls(urls);
     setCurrentIndex(0);
-    setUseFallback(urls.length === 0);
+    setUseFallbackLogo(urls.length === 0);
   }, [product, bucketName]);
 
   const handleError = () => {
     if (currentIndex + 1 < candidateUrls.length) {
       setCurrentIndex((prev) => prev + 1);
     } else {
-      setUseFallback(true);
+      setUseFallbackLogo(true);
     }
   };
 
-  if (useFallback) {
+  if (useFallbackLogo) {
     return (
-      <div className="w-full h-full flex items-center justify-center p-2 bg-white rounded-xl overflow-hidden">
+      <div className="w-full h-full flex items-center justify-center p-3 bg-white rounded-xl">
         <img
           src="/logo-placeholder.png"
-          alt=""
+          alt="Texcomercial"
           className="max-h-full max-w-full object-contain"
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (!target.dataset.triedTex) {
+              target.dataset.triedTex = "true";
+              target.src = "/logo-texcomercial.jpg";
+            }
+          }}
         />
       </div>
     );
