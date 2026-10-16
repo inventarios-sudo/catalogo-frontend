@@ -81,26 +81,24 @@ function ProductImage({
 }) {
   const [candidateUrls, setCandidateUrls] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [hasError, setHasError] = useState<boolean>(false);
+  const [useFallbackLogo, setUseFallbackLogo] = useState<boolean>(false);
 
   useEffect(() => {
     const urls = resolveImageUrl(product, bucketName);
     setCandidateUrls(urls);
     setCurrentIndex(0);
-    setHasError(urls.length === 0);
+    setUseFallbackLogo(urls.length === 0);
   }, [product, bucketName]);
 
   const handleError = () => {
     if (currentIndex + 1 < candidateUrls.length) {
       setCurrentIndex((prev) => prev + 1);
     } else {
-      setHasError(true);
+      setUseFallbackLogo(true);
     }
   };
 
-  const currentSrc = candidateUrls[currentIndex] || '';
-
-  if (hasError || !currentSrc) {
+  if (useFallbackLogo) {
     return (
       <div className="w-full h-full flex items-center justify-center p-3 bg-white rounded-xl">
         <img
@@ -112,10 +110,12 @@ function ProductImage({
     );
   }
 
+  const currentSrc = candidateUrls[currentIndex] || '';
+
   return (
     <img
       src={currentSrc}
-      alt={product.descripcion || product.referencia}
+      alt="Producto"
       onError={handleError}
       onClick={() => onImageClick(currentSrc)}
       className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
@@ -441,7 +441,6 @@ export default function CatalogoPage() {
         throw new Error('El archivo está vacío.');
       }
 
-      // Map para depurar las referencias duplicadas del Excel/CSV
       const uniqueProductsMap = new Map<string, any>();
 
       const cleanKey = (str: string) =>
