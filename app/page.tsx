@@ -36,7 +36,7 @@ const USERS_DATABASE: Record<string, { pass: string; role: string; name: string 
   'pablo llumiquinga': { pass: 'pablo.llumiquinga', role: 'Vendedor', name: 'Pablo Llumiquinga' },
   'cristian martinez': { pass: 'cristian.martinez', role: 'Vendedor', name: 'Cristian Martinez' },
   'alexander baquero': { pass: 'alexander.baquero', role: 'Vendedor', name: 'Alexander Baquero' },
-  'gabriela flores': { pass: 'gabriela.flores', role: 'Vendedor', name: 'Gabriela Flores' },
+  'gabriela flores': { pass: 'gabriela.flores', role: 'Importaciones', name: 'Gabriela Flores' },
   'nancy amagua': { pass: 'nancy,amagua', role: 'Servicio al Cliente', name: 'Nancy Amagua' },
   'yerson marquez': { pass: 'yerson.marquez', role: 'Jefe de Bodega', name: 'Yerson Marquez' },
   'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'Gerente', name: 'Madeleine Vizcaino' },
