@@ -28,17 +28,18 @@ interface Product {
 
 const USERS_DATABASE: Record<string, { pass: string; role: string; name: string }> = {
   'admin': { pass: '123456', role: 'admin', name: 'Administrador' },
-  'ernesto punina': { pass: 'ernesto.punina', role: 'vendedor', name: 'Ernesto Punina' },
-  'ronald castro': { pass: 'ronald.castro', role: 'vendedor', name: 'Ronald Castro' },
-  'franklin guaman': { pass: 'franklin.guaman', role: 'vendedor', name: 'Franklin Guaman' },
-  'marina flores': { pass: 'marina.flores', role: 'vendedor', name: 'Marina Flores' },
-  'hector morales': { pass: 'hector.morales', role: 'vendedor', name: 'Hector Morales' },
-  'pablo llumiquinga': { pass: 'pablo.llumiquinga', role: 'vendedor', name: 'Pablo Llumiquinga' },
-  'cristian martinez': { pass: 'cristian.martinez', role: 'vendedor', name: 'Cristian Martinez' },
-  'alexander baquero': { pass: 'alexander.baquero', role: 'vendedor', name: 'Alexander Baquero' },
-  'gabriela flores': { pass: 'gabriela.flores', role: 'vendedor', name: 'Gabriela Flores' },
-  'gabrielaflores': { pass: 'gabriela.flores', role: 'vendedor', name: 'Gabriela Flores' },
-  'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'vendedor', name: 'Madeleine Vizcaino' },
+  'ernesto punina': { pass: 'ernesto.punina', role: 'Vendedor', name: 'Ernesto Punina' },
+  'ronald castro': { pass: 'ronald.castro', role: 'Vendedor', name: 'Ronald Castro' },
+  'franklin guaman': { pass: 'franklin.guaman', role: 'Vendedor', name: 'Franklin Guaman' },
+  'marina flores': { pass: 'marina.flores', role: 'Vendedor', name: 'Marina Flores' },
+  'hector morales': { pass: 'hector.morales', role: 'Vendedor', name: 'Hector Morales' },
+  'pablo llumiquinga': { pass: 'pablo.llumiquinga', role: 'Vendedor', name: 'Pablo Llumiquinga' },
+  'cristian martinez': { pass: 'cristian.martinez', role: 'Vendedor', name: 'Cristian Martinez' },
+  'alexander baquero': { pass: 'alexander.baquero', role: 'Vendedor', name: 'Alexander Baquero' },
+  'gabriela flores': { pass: 'gabriela.flores', role: 'Vendedor', name: 'Gabriela Flores' },
+  'nancy amagua': { pass: 'nancy,amagua', role: 'Servicio al Cliente', name: 'Nancy Amagua' },
+  'yerson marquez': { pass: 'yerson.marquez', role: 'Jefe de Bodega', name: 'Yerson Marquez' },
+  'madeleine vizcaino': { pass: 'madeleine.vizcaino', role: 'Gerente', name: 'Madeleine Vizcaino' },
 };
 
 function resolveImageUrl(product: Product, bucketName: string): string[] {
